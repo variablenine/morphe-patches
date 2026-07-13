@@ -1,3 +1,13 @@
+## 1.0.0 (2026-07-13)
+
+### 🐛 Bug Fixes
+
+* Grant open_pull_request workflow pull-requests write permission ([04ce399](https://github.com/variablenine/morphe-patches/commit/04ce3994f3a4f8f1bbe90c5f2a8a89c93f2356c4))
+
+### ✨ New Features
+
+* Fork Morphe Patches and add BrainrotCommentFilter for YouTube ([d562511](https://github.com/variablenine/morphe-patches/commit/d562511b3176591c7bd0207400a7cd297c0ea52a))
+
 ## [1.35.0-dev.3](https://github.com/MorpheApp/morphe-patches/compare/v1.35.0-dev.2...v1.35.0-dev.3) (2026-07-13)
 
 ### 🐛 Bug Fixes
