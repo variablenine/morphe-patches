@@ -20,6 +20,8 @@ jobs:
       id-token: write
       attestations: write
       actions: write
+      issues: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
