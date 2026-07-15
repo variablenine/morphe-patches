@@ -26,6 +26,258 @@ index 6f1aa35..ee8ad45 100644
      runs-on: ubuntu-latest
      steps:
        - name: Checkout
+diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
+new file mode 100644
+index 0000000..b82ffb0
+--- /dev/null
++++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
+@@ -0,0 +1,100 @@
++package app.morphe.extension.youtube.patches.catlock;
++
++/**
++ * Pure, Android-free recognizer for the Cat Lock unlock gesture: quickly tapping
++ * <b>alternating opposite sides</b> of the screen (left, right, left, right, ...).
++ *
++ * <p>Chosen because it is extremely unlikely for a cat pawing at the screen to produce a clean,
++ * fast run of alternating left/right taps, yet a human can do it easily with two thumbs. Taps in
++ * the middle dead zone are ignored (they neither advance nor reset the streak), so a paw resting
++ * mid-screen doesn't interfere. A same-side tap or too-slow tap resets the streak.
++ *
++ * <p>No Android dependencies — unit-testable in isolation (see {@code AlternatingTapUnlockSelfTest}).
++ */
++public final class AlternatingTapUnlock {
++
++    public enum Side { LEFT, RIGHT, MIDDLE }
++
++    private final int requiredTaps;      // consecutive alternating taps needed to unlock
++    private final long maxIntervalMs;    // max gap between consecutive alternating taps
++    private final float leftMaxFraction; // x < width*leftMaxFraction  => LEFT
++    private final float rightMinFraction;// x > width*rightMinFraction => RIGHT
++
++    private Side lastSide;
++    private long lastTimeMs;
++    private int streak;
++
++    public AlternatingTapUnlock() {
++        this(6, 700L, 0.40f, 0.60f);
++    }
++
++    public AlternatingTapUnlock(int requiredTaps, long maxIntervalMs,
++                                float leftMaxFraction, float rightMinFraction) {
++        this.requiredTaps = Math.max(2, requiredTaps);
++        this.maxIntervalMs = maxIntervalMs;
++        this.leftMaxFraction = leftMaxFraction;
++        this.rightMinFraction = rightMinFraction;
++    }
++
++    /** Classify a touch x-coordinate into a side, given the view width. */
++    public Side sideForX(float x, float width) {
++        if (width <= 0) return Side.MIDDLE;
++        float f = x / width;
++        if (f < leftMaxFraction) return Side.LEFT;
++        if (f > rightMinFraction) return Side.RIGHT;
++        return Side.MIDDLE;
++    }
++
++    /** Convenience: feed a raw tap; returns true if this tap completed the unlock gesture. */
++    public boolean onTap(long timeMs, float x, float width) {
++        return onTap(timeMs, sideForX(x, width));
++    }
++
++    /**
++     * Feed one tap.
++     *
++     * @return true if the unlock gesture just completed (and the recognizer has reset).
++     */
++    public boolean onTap(long timeMs, Side side) {
++        if (side == Side.MIDDLE) {
++            return false; // dead zone: ignore entirely
++        }
++
++        if (lastSide == null) {
++            streak = 1;
++            lastSide = side;
++            lastTimeMs = timeMs;
++            return false;
++        }
++
++        boolean opposite = side != lastSide;
++        boolean inTime = (timeMs - lastTimeMs) <= maxIntervalMs;
++
++        if (opposite && inTime) {
++            streak++;
++        } else {
++            streak = 1; // same side or too slow: restart the run at this tap
++        }
++
++        lastSide = side;
++        lastTimeMs = timeMs;
++
++        if (streak >= requiredTaps) {
++            reset();
++            return true;
++        }
++        return false;
++    }
++
++    /** Forget any in-progress gesture (e.g. when the overlay is (re)shown). */
++    public void reset() {
++        lastSide = null;
++        lastTimeMs = 0;
++        streak = 0;
++    }
++
++    /** For diagnostics/tests. */
++    public int currentStreak() {
++        return streak;
++    }
++}
+diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
+new file mode 100644
+index 0000000..e292346
+--- /dev/null
++++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
+@@ -0,0 +1,140 @@
++package app.morphe.extension.youtube.patches.catlock;
++
++import android.annotation.SuppressLint;
++import android.app.Activity;
++import android.content.Context;
++import android.content.ContextWrapper;
++import android.graphics.Color;
++import android.os.SystemClock;
++import android.view.Gravity;
++import android.view.MotionEvent;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.FrameLayout;
++import android.widget.TextView;
++
++import androidx.annotation.Nullable;
++
++import java.lang.ref.WeakReference;
++
++import app.morphe.extension.shared.Logger;
++
++/**
++ * Cat Lock: a full-window, transparent overlay that swallows every touch so a cat playing with
++ * the phone can't accidentally swipe the video away, pause it, or navigate off — while the video
++ * keeps playing underneath. The overlay is dismissed only by the {@link AlternatingTapUnlock}
++ * gesture (quickly tapping alternating opposite sides of the screen).
++ *
++ * <p>The overlay is added to the Activity's decor view, so it covers the whole app UI. It stays
++ * fully transparent (birds stay visible) apart from a small unlock hint that fades out and
++ * reappears on each touch. It also keeps the screen awake while locked.
++ */
++public final class CatLockOverlay {
++
++    @Nullable
++    private static WeakReference<ViewGroup> rootRef;
++    @Nullable
++    private static View overlay;
++
++    public static boolean isLocked() {
++        return overlay != null;
++    }
++
++    /** Engage the lock. {@code anchor} is any view currently attached to the player Activity. */
++    public static void engage(View anchor) {
++        try {
++            if (isLocked()) return;
++            Activity activity = getActivity(anchor.getContext());
++            if (activity == null) {
++                Logger.printException(() -> "Cat lock: could not resolve Activity");
++                return;
++            }
++            ViewGroup root = (ViewGroup) activity.getWindow().getDecorView();
++            LockView v = new LockView(activity);
++            root.addView(v, new FrameLayout.LayoutParams(
++                    FrameLayout.LayoutParams.MATCH_PARENT,
++                    FrameLayout.LayoutParams.MATCH_PARENT));
++            v.setKeepScreenOn(true);
++            v.bringToFront();
++            overlay = v;
++            rootRef = new WeakReference<>(root);
++            Logger.printDebug(() -> "Cat lock engaged");
++        } catch (Exception ex) {
++            Logger.printException(() -> "Cat lock engage failure", ex);
++        }
++    }
++
++    static void disengage() {
++        try {
++            ViewGroup root = rootRef != null ? rootRef.get() : null;
++            if (root != null && overlay != null) {
++                root.removeView(overlay);
++            }
++            Logger.printDebug(() -> "Cat lock disengaged");
++        } catch (Exception ex) {
++            Logger.printException(() -> "Cat lock disengage failure", ex);
++        } finally {
++            overlay = null;
++            rootRef = null;
++        }
++    }
++
++    @Nullable
++    private static Activity getActivity(Context c) {
++        while (c instanceof ContextWrapper) {
++            if (c instanceof Activity) return (Activity) c;
++            c = ((ContextWrapper) c).getBaseContext();
++        }
++        return null;
++    }
++
++    @SuppressLint({"ViewConstructor", "SetTextI18n"})
++    private static final class LockView extends FrameLayout {
++        private final AlternatingTapUnlock unlock = new AlternatingTapUnlock();
++        private final TextView hint;
++
++        LockView(Context ctx) {
++            super(ctx);
++            setClickable(true);
++            setFocusable(true);
++            setBackgroundColor(Color.TRANSPARENT);
++
++            hint = new TextView(ctx);
++            hint.setText("🐾 Cat lock on — tap opposite sides quickly to unlock");
++            hint.setTextColor(0xEEFFFFFF);
++            hint.setTextSize(12f);
++            hint.setPadding(28, 14, 28, 14);
++            hint.setBackgroundColor(0x88000000);
++            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
++                    FrameLayout.LayoutParams.WRAP_CONTENT,
++                    FrameLayout.LayoutParams.WRAP_CONTENT,
++                    Gravity.TOP | Gravity.CENTER_HORIZONTAL);
++            lp.topMargin = 96;
++            addView(hint, lp);
++            flashHint();
++        }
++
++        private void flashHint() {
++            hint.animate().cancel();
++            hint.setAlpha(1f);
++            hint.animate().alpha(0f).setStartDelay(2500).setDuration(800).start();
++        }
++
++        @Override
++        public boolean onInterceptTouchEvent(MotionEvent ev) {
++            return true; // never let children/underlying views handle touches
++        }
++
++        @Override
++        public boolean onTouchEvent(MotionEvent event) {
++            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
++                flashHint();
++                boolean unlocked = unlock.onTap(SystemClock.uptimeMillis(), event.getX(), getWidth());
++                if (unlocked) {
++                    disengage();
++                }
++            }
++            return true; // consume everything so YouTube never sees the touch
++        }
++    }
++}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
 new file mode 100644
 index 0000000..0fb2f68
@@ -401,10 +653,18 @@ index 0000000..829587c
 +    }
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-index 124514c..3c3d04d 100644
+index 124514c..933a394 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-@@ -281,6 +281,7 @@ public class Settings extends SharedYouTubeSettings {
+@@ -204,6 +204,7 @@ public class Settings extends SharedYouTubeSettings {
+     public static final BooleanSetting SANITIZE_VIDEO_SUBTITLE = new BooleanSetting("morphe_sanitize_video_subtitle", FALSE);
+ 
+     // Overlay buttons
++    public static final BooleanSetting CAT_LOCK_BUTTON = new BooleanSetting("morphe_cat_lock_button", FALSE, true);
+     public static final BooleanSetting COPY_VIDEO_LINK_BUTTON = new BooleanSetting("morphe_copy_video_link_button", FALSE, true);
+     public static final BooleanSetting COPY_VIDEO_LINK_WITH_TIMESTAMP_BUTTON = new BooleanSetting("morphe_copy_video_link_with_timestamp_button", TRUE, true, parent(COPY_VIDEO_LINK_BUTTON));
+     public static final BooleanSetting HIDE_AUTOPLAY_BUTTON = new BooleanSetting("morphe_hide_autoplay_button", TRUE, true);
+@@ -281,6 +282,7 @@ public class Settings extends SharedYouTubeSettings {
      public static final BooleanSetting HIDE_COMMENTS_GIFT_ANIMATION_AND_CARDS = new BooleanSetting("morphe_hide_comments_gift_animation_and_cards", FALSE);
      public static final BooleanSetting HIDE_COMMENTS_GIFT_BUTTON = new BooleanSetting("morphe_hide_comments_gift_button", TRUE, true);
      public static final BooleanSetting HIDE_COMMENTS_INFO_BUTTON = new BooleanSetting("morphe_hide_comments_info_button", FALSE, true);
@@ -412,6 +672,154 @@ index 124514c..3c3d04d 100644
      public static final BooleanSetting HIDE_COMMENTS_LIVE_CHAT_DONATORS_BAR = new BooleanSetting("morphe_hide_comments_live_chat_donators_bar", FALSE, true);
      public static final BooleanSetting HIDE_COMMENTS_PREVIEW_COMMENT = new BooleanSetting("morphe_hide_comments_preview_comment", FALSE);
      public static final BooleanSetting HIDE_COMMENTS_PROMPTS = new BooleanSetting("morphe_hide_comments_prompts", FALSE);
+diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
+new file mode 100644
+index 0000000..3c366d0
+--- /dev/null
++++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
+@@ -0,0 +1,71 @@
++package app.morphe.extension.youtube.videoplayer;
++
++import android.view.View;
++
++import androidx.annotation.Nullable;
++
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.youtube.patches.catlock.CatLockOverlay;
++import app.morphe.extension.youtube.settings.Settings;
++
++/**
++ * Top player-controls button that engages {@link CatLockOverlay}. Mirrors the other Morphe
++ * player-overlay buttons (e.g. ExternalDownloadButton) so it rides the same initialize/visibility
++ * injection points.
++ */
++@SuppressWarnings("unused")
++public class CatLockButton {
++
++    static {
++        if (Settings.CAT_LOCK_BUTTON.get()) {
++            LegacyPlayerControlButton.incrementUpperButtonCount();
++        }
++    }
++
++    @Nullable
++    private static LegacyPlayerControlButton legacy;
++
++    /**
++     * Injection point.
++     */
++    public static void initializeLegacyButton(View controlsView) {
++        try {
++            legacy = new LegacyPlayerControlButton(
++                    controlsView,
++                    "morphe_cat_lock_button",
++                    null,
++                    "morphe_yt_cat_lock_button",
++                    Settings.CAT_LOCK_BUTTON::get,
++                    CatLockButton::onClick,
++                    null
++            );
++        } catch (Exception ex) {
++            Logger.printException(() -> "Cat lock initializeButton failure", ex);
++        }
++    }
++
++    /**
++     * Injection point.
++     */
++    public static void setVisibilityNegatedImmediate() {
++        if (legacy != null) legacy.setVisibilityNegatedImmediate();
++    }
++
++    /**
++     * Injection point.
++     */
++    public static void setVisibilityImmediate(boolean visible) {
++        if (legacy != null) legacy.setVisibilityImmediate(visible);
++    }
++
++    /**
++     * Injection point.
++     */
++    public static void setVisibility(boolean visible, boolean animated) {
++        if (legacy != null) legacy.setVisibility(visible, animated);
++    }
++
++    private static void onClick(View view) {
++        CatLockOverlay.engage(view);
++    }
++}
+diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java
+new file mode 100644
+index 0000000..ecccdb9
+--- /dev/null
++++ b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java
+@@ -0,0 +1,65 @@
++package app.morphe.extension.youtube.patches.catlock;
++
++import app.morphe.extension.youtube.patches.catlock.AlternatingTapUnlock.Side;
++
++/**
++ * Dependency-free self-test for {@link AlternatingTapUnlock}. Runs with a plain JDK:
++ *
++ * <pre>
++ *   cd extensions/youtube/src
++ *   javac main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java -d /tmp/cl
++ *   javac -cp /tmp/cl test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java -d /tmp/cl
++ *   java  -cp /tmp/cl app.morphe.extension.youtube.patches.catlock.AlternatingTapUnlockSelfTest
++ * </pre>
++ */
++public final class AlternatingTapUnlockSelfTest {
++    private static int pass = 0, fail = 0;
++
++    private static void check(boolean cond, String name) {
++        if (cond) pass++; else fail++;
++        System.out.printf("%s  %s%n", cond ? "PASS" : "FAIL", name);
++    }
++
++    /** Feed a side sequence at a fixed cadence; return true if unlock fires on any tap. */
++    private static boolean feed(AlternatingTapUnlock u, long stepMs, Side... sides) {
++        long t = 1000;
++        boolean fired = false;
++        for (Side s : sides) {
++            fired |= u.onTap(t, s);
++            t += stepMs;
++        }
++        return fired;
++    }
++
++    public static void main(String[] args) {
++        Side L = Side.LEFT, R = Side.RIGHT, M = Side.MIDDLE;
++
++        // --- SHOULD UNLOCK ---
++        check(feed(new AlternatingTapUnlock(), 150, L, R, L, R, L, R), "fast L-R x6 unlocks");
++        check(feed(new AlternatingTapUnlock(), 150, R, L, R, L, R, L), "fast R-L x6 unlocks");
++        check(feed(new AlternatingTapUnlock(), 300, L, R, L, R, L, R), "300ms cadence still within window");
++        // middle taps interspersed are ignored, real alternations still count
++        check(feed(new AlternatingTapUnlock(), 150, L, M, R, M, L, R, L, R), "middle taps ignored, still unlocks");
++
++        // --- SHOULD NOT UNLOCK ---
++        check(!feed(new AlternatingTapUnlock(), 150, L, L, L, L, L, L, L, L), "same side (cat pawing) never unlocks");
++        check(!feed(new AlternatingTapUnlock(), 150, L, R, L, L, R, L), "a same-side break resets the run");
++        check(!feed(new AlternatingTapUnlock(), 1500, L, R, L, R, L, R), "too-slow alternation never unlocks");
++        check(!feed(new AlternatingTapUnlock(), 150, L, R, L, R, L), "only 5 taps (need 6) does not unlock");
++        check(!feed(new AlternatingTapUnlock(), 150, M, M, M, M, M, M), "all middle taps never unlock");
++
++        // --- recovery: a broken run followed by a clean run unlocks ---
++        AlternatingTapUnlock u = new AlternatingTapUnlock();
++        feed(u, 150, L, L, L);                 // garbage
++        boolean later = feed(u, 150, R, L, R, L, R, L); // clean run after
++        check(later, "clean run after garbage still unlocks");
++
++        // --- sideForX zoning ---
++        AlternatingTapUnlock z = new AlternatingTapUnlock();
++        check(z.sideForX(50, 1000) == L && z.sideForX(950, 1000) == R && z.sideForX(500, 1000) == M,
++                "sideForX zones left/right/middle correctly");
++
++        System.out.printf("%nRESULT: %d passed, %d failed%n", pass, fail);
++        if (fail > 0) System.exit(1);
++    }
++}
 diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
 new file mode 100644
 index 0000000..80c6871
@@ -505,6 +913,80 @@ index 392e0e5..2b6a57f 100644
          license = "GNU General Public License v3.0, with additional GPL section 7 requirements"
      }
  }
+diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
+new file mode 100644
+index 0000000..0e0013f
+--- /dev/null
++++ b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
+@@ -0,0 +1,68 @@
++package app.morphe.patches.youtube.interaction.catlock
++
++import app.morphe.patcher.patch.bytecodePatch
++import app.morphe.patcher.patch.resourcePatch
++import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
++import app.morphe.patches.youtube.misc.playercontrols.addTopControl
++import app.morphe.patches.youtube.misc.playercontrols.initializeTopControl
++import app.morphe.patches.youtube.misc.playercontrols.injectVisibilityCheckCall
++import app.morphe.patches.youtube.misc.playercontrols.legacyPlayerControlsPatch
++import app.morphe.patches.youtube.misc.settings.PreferenceScreen
++import app.morphe.patches.youtube.misc.settings.settingsPatch
++import app.morphe.patches.youtube.shared.Constants.COMPATIBILITY_YOUTUBE
++import app.morphe.util.ResourceGroup
++import app.morphe.util.copyResources
++
++private val catLockResourcePatch = resourcePatch {
++    dependsOn(
++        legacyPlayerControlsPatch,
++        settingsPatch,
++    )
++
++    execute {
++        PreferenceScreen.PLAYER.addPreferences(
++            SwitchPreference("morphe_cat_lock_button", summary = true),
++        )
++
++        copyResources(
++            "catlock",
++            ResourceGroup(
++                "drawable",
++                "morphe_yt_cat_lock_button.xml",
++                "morphe_yt_cat_lock_button_bold.xml",
++            ),
++        )
++    }
++
++    finalize {
++        addTopControl(
++            "catlock",
++            "@+id/morphe_cat_lock_button",
++            "@+id/morphe_cat_lock_button",
++        )
++    }
++}
++
++private const val EXTENSION_BUTTON = "Lapp/morphe/extension/youtube/videoplayer/CatLockButton;"
++
++@Suppress("unused")
++val catLockPatch = bytecodePatch(
++    name = "Cat lock",
++    description = "Adds a cat button to the video player that locks the screen so a pet can watch " +
++        "without accidentally swiping the video away; unlock by quickly tapping alternating " +
++        "opposite sides of the screen.",
++) {
++    dependsOn(
++        catLockResourcePatch,
++        legacyPlayerControlsPatch,
++    )
++
++    compatibleWith(COMPATIBILITY_YOUTUBE)
++
++    execute {
++        // The button's click/visibility are handled entirely in the extension via
++        // LegacyPlayerControlButton, so only the initialize + visibility hooks are needed.
++        initializeTopControl(EXTENSION_BUTTON)
++        injectVisibilityCheckCall(EXTENSION_BUTTON)
++    }
++}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 index 3f99f42..c3555b7 100644
 --- a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
@@ -535,7 +1017,7 @@ index 3f99f42..c3555b7 100644
          addLithoFilter(CUSTOM_FILTER)
          addSpanFilter(SANITIZE_VIDEO_SUBTITLE_FILTER)
 diff --git a/patches/src/main/resources/addresources/values/youtube/strings.xml b/patches/src/main/resources/addresources/values/youtube/strings.xml
-index 5e93ca5..efbde08 100644
+index 5e93ca5..6d2b7b2 100644
 --- a/patches/src/main/resources/addresources/values/youtube/strings.xml
 +++ b/patches/src/main/resources/addresources/values/youtube/strings.xml
 @@ -209,6 +209,8 @@ Changes include:
@@ -547,3 +1029,91 @@ index 5e93ca5..efbde08 100644
      <string name="morphe_hide_comments_ai_chat_summary_title">Hide AI chat summary</string>
      <string name="morphe_hide_comments_channel_guidelines_title">Hide channel guidelines</string>
      <string name="morphe_hide_comments_prompts_title">Hide comment prompts</string>
+@@ -290,6 +292,8 @@ Limitations:
+     <!-- interaction.copyvideolink.copyVideoLinkButtonPatch -->
+     <string name="morphe_share_copy_link_button_success">Link copied to clipboard</string>
+     <string name="morphe_share_copy_link_with_timestamp_button_success">Link with timestamp copied to clipboard</string>
++    <string name="morphe_cat_lock_button_title">Show Cat lock button</string>
++    <string name="morphe_cat_lock_button_summary">Adds a cat button to the player that locks the screen so a pet can watch without swiping the video away. Unlock by quickly tapping alternating opposite sides of the screen.</string>
+     <string name="morphe_copy_video_link_button_title">Show Copy video link button</string>
+     <string name="morphe_copy_video_link_button_summary">Tap to copy the video link, tap and hold to copy with timestamp</string>
+     <string name="morphe_copy_video_link_with_timestamp_button_title">Copy timestamp by default</string>
+diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
+new file mode 100644
+index 0000000..5752db8
+--- /dev/null
++++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
+@@ -0,0 +1,22 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++
++    <path
++        android:fillColor="@android:color/white"
++        android:pathData="M4,3 L9.5,8.2 A6.4,6.4 0 0 1 14.5,8.2 L20,3 L18.6,10.2 A6.4,6.4 0 1 1 5.4,10.2 Z" />
++    <path
++        android:fillColor="#FF202020"
++        android:pathData="M9.3,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
++    <path
++        android:fillColor="#FF202020"
++        android:pathData="M14.7,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
++    <path
++        android:fillColor="#FF202020"
++        android:strokeColor="#FF202020"
++        android:strokeWidth="0.6"
++        android:pathData="M12,14.4 L12,16 M12,16 L10.6,16.9 M12,16 L13.4,16.9" />
++</vector>
+\ No newline at end of file
+diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
+new file mode 100644
+index 0000000..5752db8
+--- /dev/null
++++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
+@@ -0,0 +1,22 @@
++<?xml version="1.0" encoding="utf-8"?>
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++
++    <path
++        android:fillColor="@android:color/white"
++        android:pathData="M4,3 L9.5,8.2 A6.4,6.4 0 0 1 14.5,8.2 L20,3 L18.6,10.2 A6.4,6.4 0 1 1 5.4,10.2 Z" />
++    <path
++        android:fillColor="#FF202020"
++        android:pathData="M9.3,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
++    <path
++        android:fillColor="#FF202020"
++        android:pathData="M14.7,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
++    <path
++        android:fillColor="#FF202020"
++        android:strokeColor="#FF202020"
++        android:strokeWidth="0.6"
++        android:pathData="M12,14.4 L12,16 M12,16 L10.6,16.9 M12,16 L13.4,16.9" />
++</vector>
+\ No newline at end of file
+diff --git a/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
+new file mode 100644
+index 0000000..33814e4
+--- /dev/null
++++ b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
+@@ -0,0 +1,15 @@
++<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android">
++
++    <com.google.android.libraries.youtube.common.ui.TouchImageView
++        android:id="@+id/morphe_cat_lock_button"
++        style="@style/YouTubePlayerButton"
++        android:layout_width="@dimen/controls_overlay_action_button_size"
++        android:layout_height="@dimen/controls_overlay_action_button_size"
++        android:layout_alignWithParentIfMissing="true"
++        android:layout_alignParentTop="true"
++        android:layout_marginTop="2dp"
++        android:layout_marginEnd="0dp"
++        android:layout_toStartOf="@id/morphe_external_download_button"
++        android:padding="@dimen/controls_overlay_action_button_padding"
++        android:src="@drawable/morphe_yt_cat_lock_button_bold" />
++</RelativeLayout>

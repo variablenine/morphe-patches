@@ -16,17 +16,37 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-Nine files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+17 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
+
+**Feature: Hide brainrot comments (YouTube)**
 
 | File | Change |
 |---|---|
 | `extensions/youtube/.../patches/components/BrainrotDetector.java` | **New file.** De-obfuscating meme-lexicon density scorer. |
 | `extensions/youtube/.../patches/components/BrainrotCommentFilter.java` | **New file.** `Filter` subclass; path callback on `comment_thread.eml`; calls `detector.shouldHide(asciiStrings.getStrings())`; gated by `Settings.HIDE_BRAINROT_COMMENTS`. |
-| `extensions/youtube/src/test/.../BrainrotDetectorSelfTest.java` | **New file.** Plain-javac self-test; must print `22 passed, 0 failed`. |
-| `extensions/youtube/.../settings/Settings.java` | Add `HIDE_BRAINROT_COMMENTS = new BooleanSetting("morphe_hide_brainrot_comments", TRUE)` next to the other comment settings. |
+| `extensions/youtube/src/test/.../components/BrainrotDetectorSelfTest.java` | **New file.** Plain-javac self-test; must print `22 passed, 0 failed`. |
+| `extensions/youtube/.../settings/Settings.java` | Add `HIDE_BRAINROT_COMMENTS = new BooleanSetting("morphe_hide_brainrot_comments", TRUE)` next to the other comment settings. (Also carries the Cat lock setting below.) |
 | `patches/.../youtube/layout/hide/general/HideLayoutComponentsPatch.kt` | (a) const `BRAINROT_COMMENT_FILTER` = extension class descriptor; (b) `SwitchPreference("morphe_hide_brainrot_comments", summary = true)` in the `morphe_comments_screen` preference screen; (c) `addLithoFilter(BRAINROT_COMMENT_FILTER)` next to the other `addLithoFilter` calls. |
-| `patches/src/main/resources/addresources/values/youtube/strings.xml` | Add `morphe_hide_brainrot_comments_title` and `..._summary` strings. |
+| `patches/src/main/resources/addresources/values/youtube/strings.xml` | Add `morphe_hide_brainrot_comments_*` and `morphe_cat_lock_button_*` strings. |
+
+**Feature: Cat lock (YouTube)** — a player button that locks the screen (transparent full-window overlay swallowing all touches) so a pet can watch; unlocked by the alternating-opposite-sides tap gesture.
+
+| File | Change |
+|---|---|
+| `extensions/youtube/.../patches/catlock/AlternatingTapUnlock.java` | **New file.** Pure unlock-gesture recognizer (alternating L/R fast taps). |
+| `extensions/youtube/.../patches/catlock/CatLockOverlay.java` | **New file.** Full-window transparent overlay on the Activity decor view; consumes touches; unlock via `AlternatingTapUnlock`; keep-screen-on + fading hint. |
+| `extensions/youtube/.../videoplayer/CatLockButton.java` | **New file.** Top player-control button (mirrors `ExternalDownloadButton`); `onClick` calls `CatLockOverlay.engage(view)`; gated by `Settings.CAT_LOCK_BUTTON`. |
+| `extensions/youtube/src/test/.../catlock/AlternatingTapUnlockSelfTest.java` | **New file.** Plain-javac self-test; must print `11 passed, 0 failed`. |
+| `patches/.../youtube/interaction/catlock/CatLockPatch.kt` | **New file.** Mirrors `DownloadsPatch`: `SwitchPreference("morphe_cat_lock_button")`, `copyResources("catlock", ...)`, `addTopControl("catlock", ...)`, `initializeTopControl`/`injectVisibilityCheckCall(CatLockButton)`. |
+| `extensions/youtube/.../settings/Settings.java` | Add `CAT_LOCK_BUTTON = new BooleanSetting("morphe_cat_lock_button", FALSE, true)` among the overlay buttons. (Same file as brainrot above.) |
+| `patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml` | **New file.** Top-controls button, anchored `toStartOf @id/morphe_external_download_button`. |
+| `patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button{,_bold}.xml` | **New files.** Cat-face vector icon. |
+
+**Fork infrastructure (not tied to a feature)**
+
+| File | Change |
+|---|---|
 | `patches/build.gradle.kts` | `group = "app.variablenine"`; personalized `about {}` block (name "variablenine Patches", fork notice, source URL). |
 | `.github/workflows/release.yml` | Add `issues: write` and `pull-requests: write` to job permissions. |
 | `.github/workflows/open_pull_request.yml` | Add workflow-level `permissions: contents: read, pull-requests: write`. |
