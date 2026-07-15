@@ -35,9 +35,9 @@ filter, leave upstream's *Hide comments by keywords* setting off.
 ## 🩹 Patches list
 
 <!-- PATCHES_START -->
-> **[v1.0.0](https://github.com/variablenine/morphe-patches/releases/tag/v1.0.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;125 patches total
+> **[v1.1.0](https://github.com/variablenine/morphe-patches/releases/tag/v1.1.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;126 patches total
 <details>
-<summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;72 patches</summary>
+<summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;73 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -53,6 +53,7 @@ filter, leave upstream's *Hide comments by keywords* setting off.
 | [Bypass image region restrictions](#bypass-image-region-restrictions) | Adds an option to use a different host for user avatar and channel images and can fix missing images that are blocked in some countries. |  |
 | [Bypass link redirects](#bypass-link-redirects) | Adds an option to bypass redirects and open the original link directly. |  |
 | [Captions](#captions) | Adds an option to disable captions from being automatically enabled or to set caption cookies. |  |
+| [Cat lock](#cat-lock) | Adds a cat button to the video player that locks the screen so a pet can watch without accidentally swiping the video away; unlock by quickly tapping alternating opposite sides of the screen. |  |
 | [Change form factor](#change-form-factor) | Adds an option to change the UI appearance to a phone, tablet, or automotive device. |  |
 | [Change header](#change-header) | Adds an option to change the header logo in the top left corner of the app. | • Custom header logo |
 | [Change start page](#change-start-page) | Adds an option to set which page the app opens in instead of the homepage. |  |

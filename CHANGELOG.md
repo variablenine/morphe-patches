@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/variablenine/morphe-patches/compare/v1.0.0...v1.1.0) (2026-07-15)
+
+### ✨ New Features
+
+* Add Cat lock player button for YouTube ([29dde1a](https://github.com/variablenine/morphe-patches/commit/29dde1a402120f88376bb743d3ac4a760aecdfec))
+
 ## 1.0.0 (2026-07-13)
 
 ### 🐛 Bug Fixes
