@@ -292,6 +292,8 @@ Limitations:
     <!-- interaction.copyvideolink.copyVideoLinkButtonPatch -->
     <string name="morphe_share_copy_link_button_success">Link copied to clipboard</string>
     <string name="morphe_share_copy_link_with_timestamp_button_success">Link with timestamp copied to clipboard</string>
+    <string name="morphe_cat_lock_button_title">Show Cat lock button</string>
+    <string name="morphe_cat_lock_button_summary">Adds a cat button to the player that locks the screen so a pet can watch without swiping the video away. Unlock by quickly tapping alternating opposite sides of the screen.</string>
     <string name="morphe_copy_video_link_button_title">Show Copy video link button</string>
     <string name="morphe_copy_video_link_button_summary">Tap to copy the video link, tap and hold to copy with timestamp</string>
     <string name="morphe_copy_video_link_with_timestamp_button_title">Copy timestamp by default</string>
