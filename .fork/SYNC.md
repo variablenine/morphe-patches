@@ -42,6 +42,7 @@ patch no longer applies cleanly):
 | `extensions/youtube/.../settings/Settings.java` | Add `CAT_LOCK_BUTTON = new BooleanSetting("morphe_cat_lock_button", FALSE, true)` among the overlay buttons. (Same file as brainrot above.) |
 | `patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml` | **New file.** Top-controls button, anchored `toStartOf @id/morphe_external_download_button`. |
 | `patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button{,_bold}.xml` | **New files.** Cat-face vector icon. |
+| `extensions/youtube/.../swipecontrols/SwipeControlsHostActivity.kt` | In `dispatchTouchEvent`, short-circuit swipe controls while `CatLockOverlay.isLocked()` (swipe controls act at the Activity level, ahead of the overlay view, so brightness/volume swipes must be suppressed while locked). Import `CatLockOverlay`. |
 
 **Fork infrastructure (not tied to a feature)**
 
@@ -57,6 +58,7 @@ patch no longer applies cleanly):
 - `CHANGELOG.md`, `gradle.properties`, `patches-list.json`, `patches-bundle.json` (owned by THIS repo's semantic-release)
 - `.fork/**` (this manifest and the delta patch)
 - **Deleted:** `patches-bundle.png` (Morphe logo; must stay deleted — GPLv3 §7 branding restriction)
+- **Deleted:** `.github/workflows/crowdin_pull.yml` and `.github/workflows/crowdin_push.yml` (upstream translation-sync jobs that require Morphe's Crowdin secrets; in this fork they only fail and email the owner — keep them deleted on every sync)
 
 ## Sync procedure
 

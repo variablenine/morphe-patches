@@ -111,10 +111,11 @@ public final class CatLockOverlay {
                     Gravity.TOP | Gravity.CENTER_HORIZONTAL);
             lp.topMargin = 96;
             addView(hint, lp);
-            flashHint();
+            flashHint(null);
         }
 
-        private void flashHint() {
+        private void flashHint(@Nullable String text) {
+            if (text != null) hint.setText(text);
             hint.animate().cancel();
             hint.setAlpha(1f);
             hint.animate().alpha(0f).setStartDelay(2500).setDuration(800).start();
@@ -127,11 +128,24 @@ public final class CatLockOverlay {
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
-            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                flashHint();
-                boolean unlocked = unlock.onTap(SystemClock.uptimeMillis(), event.getX(), getWidth());
+            final int action = event.getActionMasked();
+            // ACTION_POINTER_DOWN matters: tapping alternately with two thumbs usually
+            // overlaps touches, so the second thumb arrives as a POINTER_DOWN of the
+            // same gesture rather than a fresh ACTION_DOWN. Only counting ACTION_DOWN
+            // made two-thumb unlocking nearly impossible.
+            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+                float x = event.getX(event.getActionIndex());
+                boolean unlocked = unlock.onTap(SystemClock.uptimeMillis(), x, getWidth());
+                int streak = unlock.currentStreak();
                 if (unlocked) {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
                     disengage();
+                } else if (streak >= 2) {
+                    // Visible + haptic progress so a human can tell taps are registering.
+                    performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
+                    flashHint("🐾 " + streak + "/6");
+                } else {
+                    flashHint("🐾 Cat lock on — tap opposite sides quickly to unlock");
                 }
             }
             return true; // consume everything so YouTube never sees the touch

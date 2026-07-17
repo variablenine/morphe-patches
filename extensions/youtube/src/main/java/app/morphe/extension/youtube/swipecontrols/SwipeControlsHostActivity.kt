@@ -10,6 +10,7 @@ import android.view.WindowInsets
 import app.morphe.extension.shared.Logger.printDebug
 import app.morphe.extension.shared.Logger.printException
 import app.morphe.extension.youtube.patches.VersionCheckPatch
+import app.morphe.extension.youtube.patches.catlock.CatLockOverlay
 import app.morphe.extension.youtube.settings.Settings
 import app.morphe.extension.youtube.shared.PlayerType
 import app.morphe.extension.youtube.swipecontrols.controller.AudioVolumeController
@@ -88,7 +89,10 @@ class SwipeControlsHostActivity : Activity() {
 
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
         ensureInitialized()
-        return if ((ev != null) && gesture.submitTouchEvent(ev)) {
+        // Cat lock: swipe controls act at the Activity level, before the view hierarchy,
+        // so they would react to brightness/volume swipes even while the lock overlay is
+        // shown. Step aside while locked; the overlay view then consumes the event.
+        return if ((ev != null) && !CatLockOverlay.isLocked() && gesture.submitTouchEvent(ev)) {
             true
         } else {
             super.dispatchTouchEvent(ev)
