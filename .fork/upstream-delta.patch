@@ -134,10 +134,10 @@ index 0000000..b82ffb0
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
 new file mode 100644
-index 0000000..e292346
+index 0000000..2edf469
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,154 @@
 +package app.morphe.extension.youtube.patches.catlock;
 +
 +import android.annotation.SuppressLint;
@@ -251,10 +251,11 @@ index 0000000..e292346
 +                    Gravity.TOP | Gravity.CENTER_HORIZONTAL);
 +            lp.topMargin = 96;
 +            addView(hint, lp);
-+            flashHint();
++            flashHint(null);
 +        }
 +
-+        private void flashHint() {
++        private void flashHint(@Nullable String text) {
++            if (text != null) hint.setText(text);
 +            hint.animate().cancel();
 +            hint.setAlpha(1f);
 +            hint.animate().alpha(0f).setStartDelay(2500).setDuration(800).start();
@@ -267,11 +268,24 @@ index 0000000..e292346
 +
 +        @Override
 +        public boolean onTouchEvent(MotionEvent event) {
-+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-+                flashHint();
-+                boolean unlocked = unlock.onTap(SystemClock.uptimeMillis(), event.getX(), getWidth());
++            final int action = event.getActionMasked();
++            // ACTION_POINTER_DOWN matters: tapping alternately with two thumbs usually
++            // overlaps touches, so the second thumb arrives as a POINTER_DOWN of the
++            // same gesture rather than a fresh ACTION_DOWN. Only counting ACTION_DOWN
++            // made two-thumb unlocking nearly impossible.
++            if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
++                float x = event.getX(event.getActionIndex());
++                boolean unlocked = unlock.onTap(SystemClock.uptimeMillis(), x, getWidth());
++                int streak = unlock.currentStreak();
 +                if (unlocked) {
++                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
 +                    disengage();
++                } else if (streak >= 2) {
++                    // Visible + haptic progress so a human can tell taps are registering.
++                    performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
++                    flashHint("🐾 " + streak + "/6");
++                } else {
++                    flashHint("🐾 Cat lock on — tap opposite sides quickly to unlock");
 +                }
 +            }
 +            return true; // consume everything so YouTube never sees the touch
@@ -672,6 +686,30 @@ index 124514c..933a394 100644
      public static final BooleanSetting HIDE_COMMENTS_LIVE_CHAT_DONATORS_BAR = new BooleanSetting("morphe_hide_comments_live_chat_donators_bar", FALSE, true);
      public static final BooleanSetting HIDE_COMMENTS_PREVIEW_COMMENT = new BooleanSetting("morphe_hide_comments_preview_comment", FALSE);
      public static final BooleanSetting HIDE_COMMENTS_PROMPTS = new BooleanSetting("morphe_hide_comments_prompts", FALSE);
+diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
+index 9c78b57..b73db02 100644
+--- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
++++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
+@@ -10,6 +10,7 @@ import android.view.WindowInsets
+ import app.morphe.extension.shared.Logger.printDebug
+ import app.morphe.extension.shared.Logger.printException
+ import app.morphe.extension.youtube.patches.VersionCheckPatch
++import app.morphe.extension.youtube.patches.catlock.CatLockOverlay
+ import app.morphe.extension.youtube.settings.Settings
+ import app.morphe.extension.youtube.shared.PlayerType
+ import app.morphe.extension.youtube.swipecontrols.controller.AudioVolumeController
+@@ -88,7 +89,10 @@ class SwipeControlsHostActivity : Activity() {
+ 
+     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+         ensureInitialized()
+-        return if ((ev != null) && gesture.submitTouchEvent(ev)) {
++        // Cat lock: swipe controls act at the Activity level, before the view hierarchy,
++        // so they would react to brightness/volume swipes even while the lock overlay is
++        // shown. Step aside while locked; the overlay view then consumes the event.
++        return if ((ev != null) && !CatLockOverlay.isLocked() && gesture.submitTouchEvent(ev)) {
+             true
+         } else {
+             super.dispatchTouchEvent(ev)
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 new file mode 100644
 index 0000000..3c366d0
