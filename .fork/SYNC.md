@@ -86,6 +86,10 @@ patch no longer applies cleanly):
 
 ## Hard rules
 
+- **Stable only.** Only ever sync to an upstream **stable** release: a semver tag `vX.Y.Z` with
+  no suffix. NEVER sync to a `-dev`, `-rc`, `-beta`, `-alpha`, or any other prerelease tag, and
+  never to an untagged `dev`-branch commit. (The initial fork baseline `v1.35.0-dev.3` is the one
+  historical exception — from the first sync onward the baseline must always be a stable tag.)
 - Never force-push `main` or rewrite semantic-release commits/tags.
 - Never reintroduce Morphe branding (logo files, "Morphe" as the bundle name).
 - `chore:` commits do not trigger releases; use `bump:` for syncs so a release is cut.
