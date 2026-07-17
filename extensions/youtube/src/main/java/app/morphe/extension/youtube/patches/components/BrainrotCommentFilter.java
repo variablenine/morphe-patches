@@ -25,7 +25,11 @@ public final class BrainrotCommentFilter extends Filter {
     public BrainrotCommentFilter() {
         commentThread = new StringFilterGroup(
                 Settings.HIDE_BRAINROT_COMMENTS,
-                "comment_thread.eml"
+                // Expanded comment list items,
+                "comment_thread.eml",
+                // and the collapsed comment preview/teaser shown under the video.
+                "comments_entry_point_teaser",
+                "comments_entry_point_simplebox"
         );
 
         addPathCallbacks(commentThread);
@@ -36,11 +40,10 @@ public final class BrainrotCommentFilter extends Filter {
                               String path, byte[] buffer, BufferAsciiStrings asciiStrings,
                               StringFilterGroup matchedGroup, FilterContentType contentType, int contentIndex) {
         if (matchedGroup == commentThread) {
-            // asciiStrings holds the printable runs found in the component buffer (comment text
-            // among them). Runs are delimited; the detector normalizes delimiters to boundaries
-            // and only fires on short, meme-dominated text, so surrounding UI strings do not
-            // trigger a match on their own.
-            return detector.shouldHide(asciiStrings.getStrings());
+            // asciiStrings holds the printable runs in the component buffer (the comment text,
+            // plus author/UI strings and layout identifiers). Evaluate each run separately so the
+            // surrounding noise doesn't dilute the comment-text run below the detection threshold.
+            return detector.shouldHideAnySegment(asciiStrings.getStrings());
         }
 
         return false;

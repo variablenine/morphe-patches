@@ -14,7 +14,7 @@ index 2006f78..8cf51f8 100644
    pull-request:
      name: Open pull request
 diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
-index 6f1aa35..ee8ad45 100644
+index 6f1aa35..df44fd6 100644
 --- a/.github/workflows/release.yml
 +++ b/.github/workflows/release.yml
 @@ -20,6 +20,8 @@ jobs:
@@ -26,6 +26,15 @@ index 6f1aa35..ee8ad45 100644
      runs-on: ubuntu-latest
      steps:
        - name: Checkout
+@@ -53,7 +55,7 @@ jobs:
+ 
+       - name: Attest
+         if: steps.release.outputs.new_release_published == 'true'
+-        uses: actions/attest-build-provenance@v3
++        uses: actions/attest-build-provenance@v4
+         with:
+           subject-name: 'Morphe Patches ${{ steps.release.outputs.new_release_git_tag }}'
+           subject-path: patches/build/libs/patches-*.mpp
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
 new file mode 100644
 index 0000000..b82ffb0
@@ -294,10 +303,10 @@ index 0000000..2edf469
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
 new file mode 100644
-index 0000000..0fb2f68
+index 0000000..787f73f
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
-@@ -0,0 +1,48 @@
+@@ -0,0 +1,51 @@
 +package app.morphe.extension.youtube.patches.components;
 +
 +import app.morphe.extension.shared.patches.components.BufferAsciiStrings;
@@ -325,7 +334,11 @@ index 0000000..0fb2f68
 +    public BrainrotCommentFilter() {
 +        commentThread = new StringFilterGroup(
 +                Settings.HIDE_BRAINROT_COMMENTS,
-+                "comment_thread.eml"
++                // Expanded comment list items,
++                "comment_thread.eml",
++                // and the collapsed comment preview/teaser shown under the video.
++                "comments_entry_point_teaser",
++                "comments_entry_point_simplebox"
 +        );
 +
 +        addPathCallbacks(commentThread);
@@ -336,11 +349,10 @@ index 0000000..0fb2f68
 +                              String path, byte[] buffer, BufferAsciiStrings asciiStrings,
 +                              StringFilterGroup matchedGroup, FilterContentType contentType, int contentIndex) {
 +        if (matchedGroup == commentThread) {
-+            // asciiStrings holds the printable runs found in the component buffer (comment text
-+            // among them). Runs are delimited; the detector normalizes delimiters to boundaries
-+            // and only fires on short, meme-dominated text, so surrounding UI strings do not
-+            // trigger a match on their own.
-+            return detector.shouldHide(asciiStrings.getStrings());
++            // asciiStrings holds the printable runs in the component buffer (the comment text,
++            // plus author/UI strings and layout identifiers). Evaluate each run separately so the
++            // surrounding noise doesn't dilute the comment-text run below the detection threshold.
++            return detector.shouldHideAnySegment(asciiStrings.getStrings());
 +        }
 +
 +        return false;
@@ -348,10 +360,10 @@ index 0000000..0fb2f68
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java
 new file mode 100644
-index 0000000..829587c
+index 0000000..ede7d41
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,333 @@
 +package app.morphe.extension.youtube.patches.components;
 +
 +import java.text.Normalizer;
@@ -416,6 +428,25 @@ index 0000000..829587c
 +    /** Convenience entry point: true if the comment text should be hidden. */
 +    public boolean shouldHide(String commentText) {
 +        return evaluate(commentText).hide;
++    }
++
++    /**
++     * Evaluate delimited buffer text one segment at a time and hide if <b>any</b> segment is
++     * brainrot. A Litho component buffer yields many strings — the comment text, but also the
++     * author, "Reply"/"Like", timestamps and internal layout identifiers. Scoring the whole
++     * concatenation dilutes the meme density so real spam scores too low; scoring each segment
++     * in isolation keeps the comment-text segment (a full sentence stays one segment, since
++     * spaces are ASCII) separate from the surrounding noise.
++     *
++     * @param delimitedText {@code BufferAsciiStrings.getStrings()} output (segments joined by
++     *                      the {@code ❙} U+2759 delimiter).
++     */
++    public boolean shouldHideAnySegment(String delimitedText) {
++        if (delimitedText == null || delimitedText.isEmpty()) return false;
++        for (String segment : delimitedText.split("[❙\\n\\r]+")) {
++            if (shouldHide(segment)) return true;
++        }
++        return false;
 +    }
 +
 +    // ---- normalization -------------------------------------------------------
@@ -860,10 +891,10 @@ index 0000000..ecccdb9
 +}
 diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
 new file mode 100644
-index 0000000..80c6871
+index 0000000..1f8946a
 --- /dev/null
 +++ b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,89 @@
 +package app.morphe.extension.youtube.patches.components;
 +
 +/**
@@ -892,6 +923,17 @@ index 0000000..80c6871
 +                v.hide ? "HIDE" : "keep",
 +                comment.length() > 42 ? comment.substring(0, 39) + "..." : comment,
 +                v.reason);
++    }
++
++    private static void checkSeg(BrainrotDetector d, boolean expectHide, String delimited) {
++        boolean got = d.shouldHideAnySegment(delimited);
++        boolean ok = got == expectHide;
++        if (ok) pass++; else fail++;
++        System.out.printf("%s  expect=%-4s got=%-4s | %s%n",
++                ok ? "PASS" : "FAIL",
++                expectHide ? "HIDE" : "keep",
++                got ? "HIDE" : "keep",
++                delimited.length() > 60 ? delimited.substring(0, 57) + "..." : delimited);
 +    }
 +
 +    public static void main(String[] args) {
@@ -923,6 +965,19 @@ index 0000000..80c6871
 +        check(d, false, "great video, the editing on this is insane");
 +        check(d, false, "anti");
 +        check(d, false, "the bedrock of this community is the modders who fix everything");
++
++        System.out.println();
++        System.out.println("=== shouldHideAnySegment (real buffer: comment text + surrounding noise) ===");
++        // '❙' (U+2759) is the delimiter BufferAsciiStrings.getStrings() joins runs with.
++        final String X = "❙";
++        // The exact failure from the screenshot: pure brainrot comment amid author/UI/layout runs.
++        checkSeg(d, true, "FIX MOJANG BEDROCK" + X + "SomeUser" + X + "Reply" + X + "Like" + X + "comment_thread.eml");
++        checkSeg(d, true, "CoolUser" + X + "anti spiral viral" + X + "Reply" + X + "1.2K" + X + "comments_entry_point_teaser");
++        // Legit comment mentioning the words, surrounded by the same noise -> must NOT hide.
++        checkSeg(d, false, "the anti-spiral arc was peak animation honestly" + X + "GurrenFan" + X + "Reply" + X + "comment_thread.eml");
++        checkSeg(d, false, "mojang really needs to fix the bedrock parity issues" + X + "RedstoneNerd" + X + "Reply");
++        // Buffer with no comment-text brainrot at all -> keep.
++        checkSeg(d, false, "great video" + X + "SpiralStudios" + X + "Reply" + X + "Like" + X + "comment_thread.eml");
 +
 +        System.out.println();
 +        System.out.printf("RESULT: %d passed, %d failed%n", pass, fail);
