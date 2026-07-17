@@ -24,8 +24,8 @@ patch no longer applies cleanly):
 | File | Change |
 |---|---|
 | `extensions/youtube/.../patches/components/BrainrotDetector.java` | **New file.** De-obfuscating meme-lexicon density scorer. |
-| `extensions/youtube/.../patches/components/BrainrotCommentFilter.java` | **New file.** `Filter` subclass; path callback on `comment_thread.eml`; calls `detector.shouldHide(asciiStrings.getStrings())`; gated by `Settings.HIDE_BRAINROT_COMMENTS`. |
-| `extensions/youtube/src/test/.../components/BrainrotDetectorSelfTest.java` | **New file.** Plain-javac self-test; must print `22 passed, 0 failed`. |
+| `extensions/youtube/.../patches/components/BrainrotCommentFilter.java` | **New file.** `Filter` subclass; path callbacks on `comment_thread.eml` (expanded list) + `comments_entry_point_teaser`/`comments_entry_point_simplebox` (collapsed preview); calls `detector.shouldHideAnySegment(asciiStrings.getStrings())` (per-segment, to avoid buffer-noise dilution); gated by `Settings.HIDE_BRAINROT_COMMENTS`. |
+| `extensions/youtube/src/test/.../components/BrainrotDetectorSelfTest.java` | **New file.** Plain-javac self-test; must print `27 passed, 0 failed`. |
 | `extensions/youtube/.../settings/Settings.java` | Add `HIDE_BRAINROT_COMMENTS = new BooleanSetting("morphe_hide_brainrot_comments", TRUE)` next to the other comment settings. (Also carries the Cat lock setting below.) |
 | `patches/.../youtube/layout/hide/general/HideLayoutComponentsPatch.kt` | (a) const `BRAINROT_COMMENT_FILTER` = extension class descriptor; (b) `SwitchPreference("morphe_hide_brainrot_comments", summary = true)` in the `morphe_comments_screen` preference screen; (c) `addLithoFilter(BRAINROT_COMMENT_FILTER)` next to the other `addLithoFilter` calls. |
 | `patches/src/main/resources/addresources/values/youtube/strings.xml` | Add `morphe_hide_brainrot_comments_*` and `morphe_cat_lock_button_*` strings. |

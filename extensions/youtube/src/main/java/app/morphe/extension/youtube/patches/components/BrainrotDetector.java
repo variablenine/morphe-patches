@@ -64,6 +64,25 @@ public final class BrainrotDetector {
         return evaluate(commentText).hide;
     }
 
+    /**
+     * Evaluate delimited buffer text one segment at a time and hide if <b>any</b> segment is
+     * brainrot. A Litho component buffer yields many strings — the comment text, but also the
+     * author, "Reply"/"Like", timestamps and internal layout identifiers. Scoring the whole
+     * concatenation dilutes the meme density so real spam scores too low; scoring each segment
+     * in isolation keeps the comment-text segment (a full sentence stays one segment, since
+     * spaces are ASCII) separate from the surrounding noise.
+     *
+     * @param delimitedText {@code BufferAsciiStrings.getStrings()} output (segments joined by
+     *                      the {@code ❙} U+2759 delimiter).
+     */
+    public boolean shouldHideAnySegment(String delimitedText) {
+        if (delimitedText == null || delimitedText.isEmpty()) return false;
+        for (String segment : delimitedText.split("[❙\\n\\r]+")) {
+            if (shouldHide(segment)) return true;
+        }
+        return false;
+    }
+
     // ---- normalization -------------------------------------------------------
 
     /** Per-char homoglyph / leetspeak folding to a base latin letter. */
