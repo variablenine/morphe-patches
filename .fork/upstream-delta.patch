@@ -1228,7 +1228,7 @@ index 0000000..8629ca8
 +</vector>
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 new file mode 100644
-index 0000000..c320a0f
+index 0000000..de7c3db
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 @@ -0,0 +1,39 @@
@@ -1239,11 +1239,11 @@ index 0000000..c320a0f
 +    android:viewportWidth="24"
 +    android:viewportHeight="24">
 +
-+    <!-- Bold-icon variant: same cat face as morphe_yt_cat_lock_button,
-+         thicker strokes to match YouTube's bold player icon setting. -->
++    <!-- Bold-icon variant: intentionally identical to morphe_yt_cat_lock_button —
++         the thinner outline is preferred even with YouTube's bold icon setting. -->
 +    <path
 +        android:strokeColor="@android:color/white"
-+        android:strokeWidth="2.4"
++        android:strokeWidth="1.9"
 +        android:strokeLineCap="round"
 +        android:strokeLineJoin="round"
 +        android:pathData="M5.8,9.4
@@ -1261,13 +1261,13 @@ index 0000000..c320a0f
 +            Z" />
 +    <path
 +        android:fillColor="@android:color/white"
-+        android:pathData="M9.2,12.7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 Z" />
++        android:pathData="M9.2,12.7 m-1.1,0 a1.1,1.1 0 1 0 2.2,0 a1.1,1.1 0 1 0 -2.2,0 Z" />
 +    <path
 +        android:fillColor="@android:color/white"
-+        android:pathData="M14.8,12.7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 Z" />
++        android:pathData="M14.8,12.7 m-1.1,0 a1.1,1.1 0 1 0 2.2,0 a1.1,1.1 0 1 0 -2.2,0 Z" />
 +    <path
 +        android:strokeColor="@android:color/white"
-+        android:strokeWidth="1.9"
++        android:strokeWidth="1.5"
 +        android:strokeLineCap="round"
 +        android:pathData="M9.9,15.9 C10.5,16.8 11.4,16.8 12.0,16.1 C12.6,16.8 13.5,16.8 14.1,15.9" />
 +</vector>
