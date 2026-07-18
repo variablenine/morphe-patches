@@ -102,8 +102,10 @@ Second \"item\" text"</string>
 ইউটিউব মিউজিক ৮.এক্স (YouTube Music 8.x) সংস্করণে — ক্রসফেড ফিচারটি কেবল ৯.এক্স বা এর চেয়ে নতুন সংস্করণে কাজ করে"</string>
   <string name="morphe_music_crossfade_about_credit_title">কৃতজ্ঞতা স্বীকার</string>
   <string name="morphe_music_crossfade_about_credit_summary">VazerOG-এর তৈরি ক্রসফেড ফিচার</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">স্থায়ী পুনরাবৃত্তি সক্ষম করুন</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">পুনরাবৃত্তি অবস্থা মনে রাখুন</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">মিশ্রণ অবস্থা মনে রাখুন</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">ডিসলাইক রিডাইরেকশন নিষ্ক্রিয় করুন</string>
   <string name="morphe_music_disable_dislike_redirection_summary">ডিসলাইক বোতাম চাপলে পরবর্তী ট্র্যাকে যাওয়া বন্ধ করে</string>

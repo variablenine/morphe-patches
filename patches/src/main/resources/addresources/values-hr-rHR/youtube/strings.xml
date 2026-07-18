@@ -66,10 +66,6 @@ Promjene uključuju:
   <string name="morphe_hide_compact_banner_summary">Skriva kompaktne natpise i razmake između nekih komponenti</string>
   <string name="morphe_hide_expandable_card_title">Proširive kartice ispod videozapisa</string>
   <string name="morphe_hide_expandable_card_entry_1">Prikaži sve</string>
-  <string name="morphe_hide_expandable_card_entry_2">Sakrij samo karticu proizvoda</string>
-  <string name="morphe_hide_expandable_card_entry_3">Sakrij samo karticu sa sažetkom</string>
-  <string name="morphe_hide_expandable_card_entry_4">Sakrij kartice proizvoda i sažetka</string>
-  <string name="morphe_hide_expandable_card_entry_5">Sakrij sve</string>
   <string name="morphe_hide_floating_microphone_button_title">Sakrij tipku plivajući mikrofon</string>
   <string name="morphe_hide_floating_microphone_button_summary">Skriva plutajuću tipku mikrofona u donjem desnom kutu zaslona s prijedlozima za pretraživanje</string>
   <string name="morphe_hide_horizontal_shelves_title">Sakrij vodoravne kartice</string>
@@ -216,7 +212,6 @@ Promjene uključuju:
 Ključne riječi mogu biti bilo koji tekst prikazan u nazivima videozapisa ili nazivima kanala
 
 Slova iz velikih slova u sredini riječi moraju točno odgovarati (npr: iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">O ključnom filtriranju</string>
   <string name="morphe_hide_keyword_content_about_whole_words_title">Pokupljati cijeli ključ/frazu</string>
   <!-- Translations must use a localized example. For languages that do not use spaces between words (Chinese, Japanese, etc.) the English AI example should be used since no localized examples exist. Or if using machine translations, or if nobody wants to think of a localized example, then the English 'ai' example should be left as-is. -->
   <string name="morphe_hide_keyword_content_about_whole_words_summary">Stavljanje ključne riječi/fraze u dvostruke navodnike spriječit će djelomična podudaranja naslova videozapisa i naziva kanala&lt;br&gt;&lt;br&gt;Na primjer,&lt;br&gt;&lt;b&gt;\"ai\"&lt;/b&gt; sakrit će videozapis: &lt;b&gt;Kako funkcionira umjetna inteligencija?&lt;/b&gt;&lt;br&gt;ali neće sakriti: &lt;b&gt;Što znači poštena upotreba?&lt;/b&gt;</string>

@@ -102,8 +102,10 @@ Pausning af crossfade for at se en musikvideo kan efterlade nogle videoer sorte 
 YouTube Music 8.x – crossfade kører kun på 9.x og nyere"</string>
   <string name="morphe_music_crossfade_about_credit_title">Kreditering</string>
   <string name="morphe_music_crossfade_about_credit_summary">Crossfade-funktionen er lavet af VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Aktiver permanent gentagelse</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Husk gentagelsestilstand</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Husk afspilningsrækkefølgetilstand</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Deaktiver omdirigering af \'synes ikke godt om\'</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Forhindrer at der springes til næste nummer, når knappen \'synes ikke godt om\' trykkes</string>

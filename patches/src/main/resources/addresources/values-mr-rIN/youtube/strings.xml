@@ -64,10 +64,8 @@ Second \"item\" text"</string>
   <string name="morphe_hide_compact_banner_summary">कॉम्पॅक्ट बॅनर आणि काही घटकांमधील अंतर लपवते</string>
   <string name="morphe_hide_expandable_card_title">व्हिडिओंच्या खाली विस्तारण्यायोग्य कार्ड</string>
   <string name="morphe_hide_expandable_card_entry_1">सर्व दर्शवा</string>
-  <string name="morphe_hide_expandable_card_entry_2">फक्त उत्पादन कार्ड लपवा</string>
-  <string name="morphe_hide_expandable_card_entry_3">फक्त सारांश कार्ड लपवा</string>
-  <string name="morphe_hide_expandable_card_entry_4">उत्पादन आणि सारांश कार्ड लपवा</string>
-  <string name="morphe_hide_expandable_card_entry_5">सर्व लपवा</string>
+  <string name="morphe_hide_expandable_card_entry_2">सारांश कार्ड फक्त लपवा</string>
+  <string name="morphe_hide_expandable_card_entry_3">सर्व लपवा</string>
   <string name="morphe_hide_floating_microphone_button_title">फ्लोटिंग मायक्रोफोन बटण लपवा</string>
   <string name="morphe_hide_floating_microphone_button_summary">शोध सूचना स्क्रीनच्या खालच्या उजव्या कोपऱ्यातील फ्लोटिंग मायक्रोफोन बटण लपवते</string>
   <string name="morphe_hide_horizontal_shelves_title">आडव्या रांगा लपवा</string>
@@ -102,6 +100,7 @@ Second \"item\" text"</string>
   <string name="morphe_hide_upload_time_summary">"मर्यादा:
 • शॉर्ट्स शेल्फ, चॅनेल पृष्ठे आणि शोध परिणामांमध्ये अपलोडचे वेळ अजूनही दिसू शकतो.
 • हे ऑटोमोटिव्ह लेआउटमध्ये कार्य करत नाही."</string>
+  <string name="morphe_hide_video_thumbnail_title">व्हिडिओ थंबनेल लपवा</string>
   <!-- 'People also watched' and 'You might also like' should be translated using the same localized wording YouTube displays for the label. -->
   <string name="morphe_hide_video_recommendation_labels_title">व्हिडिओ शिफारस लेबले लपवा</string>
   <string name="morphe_hide_video_recommendation_labels_summary">शोध परिणामांमध्ये \'लोक हे देखील पाहिले\' आणि \'तुम्हाला हे देखील आवडेल\' लेबल्स लपवते</string>
@@ -235,7 +234,6 @@ Second \"item\" text"</string>
 कीवर्ड व्हिडिओ शीर्षकांमध्ये किंवा चॅनेल नावांमध्ये असलेले कोणतेही मजकूर असू शकतात
 
 मध्यभागी मोठे अक्षर असलेले शब्द तंतोतंत जुळले पाहिजेत (उदा: iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">कीवर्ड फिल्टरिंगबद्दल</string>
   <string name="morphe_hide_keyword_content_about_whole_words_title">संपूर्ण शब्द जुळवा</string>
   <!-- Translations must use a localized example. For languages that do not use spaces between words (Chinese, Japanese, etc.) the English AI example should be used since no localized examples exist. Or if using machine translations, or if nobody wants to think of a localized example, then the English 'ai' example should be left as-is. -->
   <string name="morphe_hide_keyword_content_about_whole_words_summary">कीवर्ड/वाक्यांशला दुहेरी अवतरणांमध्ये टाकल्यास व्हिडिओ शीर्षक आणि चॅनेल नावांचे आंशिक जुळण टाळता येईल&lt;br&gt;&lt;br&gt;उदाहरणार्थ,&lt;br&gt;&lt;b&gt;\"ai\"&lt;/b&gt; व्हिडिओ लपवेल: &lt;b&gt;AI कसे कार्य करते?&lt;/b&gt;&lt;br&gt;पण लपवणार नाही: &lt;b&gt; fair use चा अर्थ काय आहे?&lt;/b&gt;</string>
@@ -245,6 +243,36 @@ Second \"item\" text"</string>
   <string name="morphe_hide_keyword_toast_invalid_conflicting">कीवर्डची विरोधाभासी घोषणा आहे: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_length">कीवर्ड खूप लहान आहे आणि अवतरण आवश्यक आहेत: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_broad">कीवर्ड सर्व व्हिडिओ लपवेल: %s</string>
+  <string name="morphe_hide_keyword_content_stats_hidden_breakdown">"• होम: %s
+• सदस्यत्व: %s
+• शोध: %s
+• टिप्पण्या: %s
+• एकूण: %s"</string>
+  <string name="morphe_hide_stats_category_title">आकडेवारी</string>
+  <string name="morphe_hide_stats_hidden_24h_title">गेल्या 24 तासांत लपलेले व्हिडिओ</string>
+  <string name="morphe_hide_stats_hidden_all_title">सर्व काळासाठी लपलेले व्हिडिओ</string>
+  <string name="morphe_hide_stats_hidden_24h_reset_title">गेल्या 24 तासांचा काउंटर रीसेट करायचा?</string>
+  <string name="morphe_hide_stats_hidden_all_reset_title">वेळ काउंटर रीसेट करायचा?</string>
+  <string name="morphe_hide_about_category_title">बद्दल</string>
+  <string name="morphe_hide_aislist_screen_title">AI चॅनेल फिल्टर</string>
+  <string name="morphe_hide_aislist_screen_summary">AiSList समुदायाद्वारे AI-व्युत्पन्न सामग्री म्हणून झेंडे ठरवलेल्या चॅनेलवरून व्हिडिओ लपवा.</string>
+  <string name="morphe_hide_aislist_blocklist_category_title">ब्लॉकलिस्ट: उच्च आत्मविश्वास</string>
+  <string name="morphe_hide_aislist_warnlist_category_title">वॉर्नलिस्ट: मध्यम आत्मविश्वास</string>
+  <string name="morphe_hide_aislist_hide_home_title">होममध्ये व्हिडिओ लपवा</string>
+  <string name="morphe_hide_aislist_hide_search_title">शोधामध्ये व्हिडिओ लपवा</string>
+  <string name="morphe_hide_aislist_stats_hidden_breakdown">"• होम: %s
+• शोध: %s
+• एकूण: %s"</string>
+  <string name="morphe_hide_aislist_stats_blocklist_title">ब्लॉकलिस्ट चॅनेल लोड झाले: %s</string>
+  <string name="morphe_hide_aislist_stats_warnlist_title">वॉर्नलिस्ट चॅनेल लोड झाले: %s</string>
+  <string name="morphe_hide_aislist_about_summary">"होम आणि शोध परिणामांमध्ये AiSList द्वारे ध्वजांकित केलेल्या चॅनेलवरून व्हिडिओ लपवण्यासाठी फिल्टर केले जातात.
+
+मर्यादा:
+• फिल्टर केलेले AI शॉर्ट्स रिक्त जागेच्या रूपात दिसू शकतात
+• काही AI व्हिडिओ अजूनही दिसू शकतात"</string>
+  <string name="morphe_hide_aislist_attribution_summary">"डेटा AiSList द्वारे प्रदान केला जातो
+
+इतर प्लॅटफॉर्मसाठी डाउनलोड पाहण्यासाठी येथे टॅप करा AiSlopList.com"</string>
   <!-- ad.hideAdsPatch -->
   <string name="morphe_hide_creator_store_shelf_title">क्रिएटर स्टोअर शेल्फ लपवा</string>
   <string name="morphe_hide_end_screen_store_banner_title">एंड स्क्रीन स्टोअर बॅनर लपवा</string>

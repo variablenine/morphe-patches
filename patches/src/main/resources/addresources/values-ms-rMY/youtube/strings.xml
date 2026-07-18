@@ -64,10 +64,6 @@ Perubahan termasuk:
   <string name="morphe_hide_compact_banner_summary">Sorokkan sepanduk padat dan ruangan di antara beberapa komponen</string>
   <string name="morphe_hide_expandable_card_title">Kad boleh kembang di bawah video</string>
   <string name="morphe_hide_expandable_card_entry_1">Tunjukkan semua</string>
-  <string name="morphe_hide_expandable_card_entry_2">Sorokkan kad produk sahaja</string>
-  <string name="morphe_hide_expandable_card_entry_3">Sorokkan kad ringkasan sahaja</string>
-  <string name="morphe_hide_expandable_card_entry_4">Sorokkan kad produk dan ringkasan</string>
-  <string name="morphe_hide_expandable_card_entry_5">Sorokkan semua</string>
   <string name="morphe_hide_floating_microphone_button_title">Sorokkan butang mikrofon terapung</string>
   <string name="morphe_hide_floating_microphone_button_summary">Sorokkan butang mikrofon terapung di sudut kanan bawah skrin cadangan hasil</string>
   <string name="morphe_hide_horizontal_shelves_title">Sorokkan laci mengufuk</string>

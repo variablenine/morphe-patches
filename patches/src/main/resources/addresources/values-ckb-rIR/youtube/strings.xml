@@ -125,7 +125,6 @@ Second \"item\" text"</string>
   <string name="morphe_hide_keyword_content_phrases_title">دەستەواژەکان بۆ شاردنەوە</string>
   <!-- For localization, it is preferred, but not required, if 'LeBlanc' is replaced with a localized name or a familiar word that has upper case letters in the middle of the word.
          This is because keywords can be in any language, and showing an example in the localized script helps convey this. -->
-  <string name="morphe_hide_keyword_content_about_title">دەربارەی فلتەرکردنی دەستەواژە</string>
   <string name="morphe_hide_keyword_content_about_whole_words_title">گونجاندنی وشە تەواوەکان</string>
   <!-- Translations must use a localized example. For languages that do not use spaces between words (Chinese, Japanese, etc.) the English AI example should be used since no localized examples exist. Or if using machine translations, or if nobody wants to think of a localized example, then the English 'ai' example should be left as-is. -->
   <!-- Translations of this should not be longer than the original English text, otherwise the text can be clipped and not entirely shown. -->

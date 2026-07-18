@@ -27,7 +27,7 @@ Second \"item\" text"</string>
   <string name="morphe_external_downloader_other_item_hint">Entrez le nom du paquet</string>
   <string name="morphe_external_downloader_other_item">Autre</string>
   <string name="morphe_external_downloader_not_found_title">Application non installée</string>
-  <string name="morphe_external_downloader_not_installed_warning">%s n\'est pas installé. Veuillez l’installer.</string>
+  <string name="morphe_external_downloader_not_installed_warning">%s n\'est pas installé. Veuillez l\'installer.</string>
   <string name="morphe_external_downloader_package_not_found_warning">"Impossible de trouver l'application installée avec le nom de paquet : %s
 
 Vérifiez que le nom de paquet est correct et que l'application est bien installée"</string>

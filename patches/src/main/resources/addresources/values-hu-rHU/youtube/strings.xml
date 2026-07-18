@@ -64,10 +64,8 @@ A változások a következőket tartalmazzák:
   <string name="morphe_hide_compact_banner_summary">Kompakt szalagképek és az egyes összetevők közötti térköz elrejtése</string>
   <string name="morphe_hide_expandable_card_title">Kibontható kártyák a videók alatt</string>
   <string name="morphe_hide_expandable_card_entry_1">Az összes megjelenítése</string>
-  <string name="morphe_hide_expandable_card_entry_2">Csak a termékkártya elrejtése</string>
-  <string name="morphe_hide_expandable_card_entry_3">Csak az összefoglaló kártya elrejtése</string>
-  <string name="morphe_hide_expandable_card_entry_4">Termék- és összefoglaló kártyák elrejtése</string>
-  <string name="morphe_hide_expandable_card_entry_5">Az összes elrejtése</string>
+  <string name="morphe_hide_expandable_card_entry_2">Csak az összefoglaló kártya elrejtése</string>
+  <string name="morphe_hide_expandable_card_entry_3">Az összes elrejtése</string>
   <string name="morphe_hide_floating_microphone_button_title">Lebegő mikrofon gomb elrejtése</string>
   <string name="morphe_hide_floating_microphone_button_summary">A keresési javaslatok képernyő jobb alsó sarkában lévő lebegő mikrofon gomb elrejtése</string>
   <string name="morphe_hide_horizontal_shelves_title">Vízszintes polcok elrejtése</string>
@@ -102,6 +100,7 @@ A változások a következőket tartalmazzák:
   <string name="morphe_hide_upload_time_summary">"Korlátozások:
 • A Shorts-polcok, a csatornaoldalak és a keresési találatok továbbra is megjeleníthetik a feltöltési időket.
 • Ez a funkció nem működik az autós elrendezéssel."</string>
+  <string name="morphe_hide_video_thumbnail_title">Videó bélyegkép elrejtése</string>
   <!-- 'People also watched' and 'You might also like' should be translated using the same localized wording YouTube displays for the label. -->
   <string name="morphe_hide_video_recommendation_labels_title">Videóajánlások címkéinek elrejtése</string>
   <string name="morphe_hide_video_recommendation_labels_summary">Keresési ajánlások címkéinek elrejtése</string>
@@ -235,7 +234,6 @@ A változások a következőket tartalmazzák:
 Kulcsszavak lehetnek csatorna nevek vagy a videó címekben megjelenő szövegek
 
 A közepén nagybetűvel kezdődő szavakat pontosan úgy kell megadni, ahogy írva vannak (pl.: iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">Tudnivalók a kulcsszószűrőről</string>
   <string name="morphe_hide_keyword_content_about_summary">"A Főoldal, a Feliratkozások, a Keresés és a megjegyzések szűrése kulcsszavas kifejezésekkel egyező tartalmak elrejtéséhez
 
 Korlátozások:
@@ -251,6 +249,36 @@ Korlátozások:
   <string name="morphe_hide_keyword_toast_invalid_conflicting">Ez a kulcsszó ütközik egy másik beállítással: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_length">A kulcsszó túl rövid, használatához tedd idézőjelbe: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_broad">Ez a kulcsszó minden videót el fog rejteni: %s</string>
+  <string name="morphe_hide_keyword_content_stats_hidden_breakdown">"• Főoldal: %s
+• Előfizetések: %s
+• Keresés: %s
+• Megjegyzések: %s
+• Összesen: %s"</string>
+  <string name="morphe_hide_stats_category_title">Statisztikák</string>
+  <string name="morphe_hide_stats_hidden_24h_title">Elrejtett videók, az elmúlt 24 órában</string>
+  <string name="morphe_hide_stats_hidden_all_title">Elrejtett videók, összességében</string>
+  <string name="morphe_hide_stats_hidden_24h_reset_title">Visszaállítsam az elmúlt 24 óra számlálóját?</string>
+  <string name="morphe_hide_stats_hidden_all_reset_title">Visszaállít minden időmérőt?</string>
+  <string name="morphe_hide_about_category_title">Névjegy</string>
+  <string name="morphe_hide_aislist_screen_title">AI csatornaszűrő</string>
+  <string name="morphe_hide_aislist_screen_summary">Rejtse el a csatornákból származó videókat, amelyeket az AiSList közösség AI-generált tartalomként jelölt meg</string>
+  <string name="morphe_hide_aislist_blocklist_category_title">Tiltólista: Magas megbízhatóság</string>
+  <string name="morphe_hide_aislist_warnlist_category_title">Figyelőlista: Közepes megbízhatóság</string>
+  <string name="morphe_hide_aislist_hide_home_title">Videók elrejtése a főoldalon</string>
+  <string name="morphe_hide_aislist_hide_search_title">Videók elrejtése a keresésben</string>
+  <string name="morphe_hide_aislist_stats_hidden_breakdown">"• Főoldal: %s
+• Keresés: %s
+• Összesen: %s"</string>
+  <string name="morphe_hide_aislist_stats_blocklist_title">Betöltött tiltólistás csatornák: %s</string>
+  <string name="morphe_hide_aislist_stats_warnlist_title">Betöltött figyelőlistás csatornák: %s</string>
+  <string name="morphe_hide_aislist_about_summary">"A főoldal és a keresési eredmények szűrése az AiSList által jelölt csatornák videóinak elrejtése érdekében
+
+Korlátozások:
+• A szűrt AI Rövid videók üres helyként jelenhetnek meg
+• Néhány AI videó még megjelenhet"</string>
+  <string name="morphe_hide_aislist_attribution_summary">"Az adatokat az AiSList biztosítja
+
+Érintse meg ide az AiSlopList.com megnyitásához, és tekintse meg a letöltéseket más platformokra"</string>
   <!-- ad.hideAdsPatch -->
   <string name="morphe_hide_creator_store_shelf_title">Alkotói termékpolc elrejtése</string>
   <string name="morphe_hide_end_screen_store_banner_title">A befejező képernyőn lévő üzletbanner elrejtése</string>

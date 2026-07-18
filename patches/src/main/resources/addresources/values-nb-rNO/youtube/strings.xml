@@ -64,10 +64,8 @@ Endringer inkluderer:
   <string name="morphe_hide_compact_banner_summary">Skjuler kompakte bannere og mellomrom mellom noen komponenter</string>
   <string name="morphe_hide_expandable_card_title">Utvidbare kort under videoer</string>
   <string name="morphe_hide_expandable_card_entry_1">Vis alle</string>
-  <string name="morphe_hide_expandable_card_entry_2">Skjul kun produktkort</string>
-  <string name="morphe_hide_expandable_card_entry_3">Skjul kun sammendragskort</string>
-  <string name="morphe_hide_expandable_card_entry_4">Skjul produkt- og sammendragskort</string>
-  <string name="morphe_hide_expandable_card_entry_5">Skjul alle</string>
+  <string name="morphe_hide_expandable_card_entry_2">Skjul sammendragskortet</string>
+  <string name="morphe_hide_expandable_card_entry_3">Skjul alle</string>
   <string name="morphe_hide_floating_microphone_button_title">Skjul flytende mikrofonknapp</string>
   <string name="morphe_hide_floating_microphone_button_summary">Skjuler flytende mikrofonknapp i nedre høyre hjørne av søkeforslags-skjermen</string>
   <string name="morphe_hide_horizontal_shelves_title">Skjul horisontale hyller</string>
@@ -102,6 +100,7 @@ Endringer inkluderer:
   <string name="morphe_hide_upload_time_summary">"Begrensninger:
 • Shorts-hyller, kanalsider og søkeresultater kan fortsatt vise opplastningstidspunkter
 • Fungerer ikke med biloppsett"</string>
+  <string name="morphe_hide_video_thumbnail_title">Skjul videominiatyrbilde</string>
   <!-- 'People also watched' and 'You might also like' should be translated using the same localized wording YouTube displays for the label. -->
   <string name="morphe_hide_video_recommendation_labels_title">Skjul videopresentasjonsmerker</string>
   <string name="morphe_hide_video_recommendation_labels_summary">Skjuler «Folk så også på» og «Du vil kanskje også like»-etiketter i søkeresultatene</string>
@@ -235,7 +234,6 @@ Endringer inkluderer:
 Nøkkelord kan være all tekst som vises i videotitler eller kanalnavn
 
 Ord med store bokstaver i midten må samsvare nøyaktig (f.eks. iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">Om nøkkelordfiltrering</string>
   <string name="morphe_hide_keyword_content_about_summary">"Hjem / Abonnementer / Søk / Kommentarer er filtrert for å skjule innhold som samsvarer med nøkkelordfraser
 
 Begrensninger:
@@ -251,6 +249,36 @@ Begrensninger:
   <string name="morphe_hide_keyword_toast_invalid_conflicting">Nøkkelord har motstridende deklarasjoner: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_length">Nøkkelordet er for kort og krever anførselstegn: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_broad">Nøkkelordet vil skjule alle videoer: %s</string>
+  <string name="morphe_hide_keyword_content_stats_hidden_breakdown">"• Hjem: %s
+• Abonnementer: %s
+• Søk: %s
+• Kommentarer: %s
+• Totalt: %s"</string>
+  <string name="morphe_hide_stats_category_title">Statistikk</string>
+  <string name="morphe_hide_stats_hidden_24h_title">Videoer skjult, siste 24 timer</string>
+  <string name="morphe_hide_stats_hidden_all_title">Videoer skjult, totalt</string>
+  <string name="morphe_hide_stats_hidden_24h_reset_title">Tilbakestille teller for siste 24 timer?</string>
+  <string name="morphe_hide_stats_hidden_all_reset_title">Tilbakestill alle tidtellere?</string>
+  <string name="morphe_hide_about_category_title">Om</string>
+  <string name="morphe_hide_aislist_screen_title">AI-kanalfilter</string>
+  <string name="morphe_hide_aislist_screen_summary">Skjul videoer fra kanaler som er flagget som AI-generert innhold av AiSList-fellesskapet</string>
+  <string name="morphe_hide_aislist_blocklist_category_title">Blokkeringsliste: Høy sikkerhet</string>
+  <string name="morphe_hide_aislist_warnlist_category_title">Advarselsliste: Moderat sikkerhet</string>
+  <string name="morphe_hide_aislist_hide_home_title">Skjul videoer i Hjem</string>
+  <string name="morphe_hide_aislist_hide_search_title">Skjul videoer i søk</string>
+  <string name="morphe_hide_aislist_stats_hidden_breakdown">"• Hjem: %s
+• Søk: %s
+• Totalt: %s"</string>
+  <string name="morphe_hide_aislist_stats_blocklist_title">Blokkeringsliste-kanaler lastet inn: %s</string>
+  <string name="morphe_hide_aislist_stats_warnlist_title">Advarselsliste-kanaler lastet inn: %s</string>
+  <string name="morphe_hide_aislist_about_summary">"Hjem- og søkeresultater er filtrert for å skjule videoer fra kanaler som er flagget av AiSList
+
+Begrensninger:
+• Filtrerte AI-shorts kan vises som et tomt område
+• Noen AI-videoer kan fortsatt vises"</string>
+  <string name="morphe_hide_aislist_attribution_summary">"Data leveres av AiSList
+
+Trykk her for å åpne AiSlopList.com og se nedlastinger for andre plattformer"</string>
   <!-- ad.hideAdsPatch -->
   <string name="morphe_hide_creator_store_shelf_title">Skjul creator store shelf</string>
   <string name="morphe_hide_end_screen_store_banner_title">Skjul sluttbanner for butikk</string>

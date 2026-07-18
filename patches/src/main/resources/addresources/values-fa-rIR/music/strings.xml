@@ -32,8 +32,8 @@ Second \"item\" text"</string>
   <!-- Empty string because custom preference handles the title itself -->
   <string name="morphe_music_crossfade_about_title">درباره</string>
   <!-- Banner row has no text; it shows a full-width graphic via a custom layout. -->
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">فعال سازی تکرار دائمی</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <!-- layout.buttons.hideButtonsPatch -->
   <!-- layout.hide.general.hideMusicComponentsPatch -->

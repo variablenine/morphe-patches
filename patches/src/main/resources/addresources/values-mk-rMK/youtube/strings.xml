@@ -61,10 +61,6 @@ Second \"item\" text"</string>
   <string name="morphe_hide_compact_banner_summary">Прикриј компактни транспаренти и простор помеѓу некои компоненти</string>
   <string name="morphe_hide_expandable_card_title">Картички што можат да се прошират под видеа</string>
   <string name="morphe_hide_expandable_card_entry_1">Прикажи ги сите</string>
-  <string name="morphe_hide_expandable_card_entry_2">Прикриј само картичка со производи</string>
-  <string name="morphe_hide_expandable_card_entry_3">Прикриј само картичка со резиме</string>
-  <string name="morphe_hide_expandable_card_entry_4">Прикриј ги картичките со производи и резиме</string>
-  <string name="morphe_hide_expandable_card_entry_5">Прикриј ги сите</string>
   <string name="morphe_hide_floating_microphone_button_title">Скриј го плукачкото микрофонско копче</string>
   <string name="morphe_hide_floating_microphone_button_summary">Прикриј копче за микрофон со лебдечко движење во долниот десен агол од екранот за предлози за пребарување</string>
   <string name="morphe_hide_horizontal_shelves_title">Скриј ги хоризонталните полици</string>
@@ -204,7 +200,6 @@ Second \"item\" text"</string>
 Клучните зборови може да бидат било кој текст што се појавува во насловите на видеата или имињата на каналите
 
 Зборовите со големи букви во средината мора да одговараат точно (на пр. iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">За филтрирање со клучни зборови</string>
   <string name="morphe_hide_keyword_content_about_whole_words_title">Оптимизација на целосно зборот</string>
   <!-- Translations must use a localized example. For languages that do not use spaces between words (Chinese, Japanese, etc.) the English AI example should be used since no localized examples exist. Or if using machine translations, or if nobody wants to think of a localized example, then the English 'ai' example should be left as-is. -->
   <string name="morphe_hide_keyword_content_about_whole_words_summary">Окружувањето на клучна реч/фраза со двојни наводници ќе спречи делумни совпаѓања на наслови на видеа и имиња на канали&lt;br&gt;&lt;br&gt;На пример,&lt;br&gt;&lt;b&gt;\"ai\"&lt;/b&gt; ќе го скрие видеото: &lt;b&gt;Како работи AI?&lt;/b&gt;&lt;br&gt;но нема да го скрие: &lt;b&gt;Што значи фер употреба?&lt;/b&gt;</string>

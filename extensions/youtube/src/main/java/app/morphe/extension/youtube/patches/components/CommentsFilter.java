@@ -30,6 +30,7 @@ import app.morphe.extension.shared.patches.components.ContextInterface;
 import app.morphe.extension.shared.patches.components.Filter;
 import app.morphe.extension.shared.patches.components.StringFilterGroup;
 import app.morphe.extension.youtube.innertube.NextResponseOuterClass.NewElement;
+import app.morphe.extension.youtube.patches.VersionCheckPatch;
 import app.morphe.extension.youtube.settings.Settings;
 import app.morphe.extension.youtube.shared.PlayerType;
 
@@ -106,6 +107,11 @@ public class CommentsFilter extends Filter {
                 "community_guidelines"
         );
 
+        var createAShortButton = new StringFilterGroup(
+                Settings.HIDE_COMMENTS_CREATE_A_SHORT_BUTTON,
+                "composer_short_creation_button.e"
+        );
+
         emojiAndTimestampButtons = new StringFilterGroup(
                 Settings.HIDE_COMMENTS_EMOJI_AND_TIMESTAMP_BUTTONS,
                 "|CellType|ContainerType|ContainerType|ContainerType|ContainerType|ContainerType|"
@@ -143,6 +149,7 @@ public class CommentsFilter extends Filter {
                 commentsFilterBar,
                 commentsPrompts,
                 communityGuidelines,
+                createAShortButton,
                 emojiAndTimestampButtons,
                 giftAnimationAndCards,
                 previewComment,
@@ -169,6 +176,9 @@ public class CommentsFilter extends Filter {
         }
 
         if (matchedGroup == commentComposerButtons) {
+            if (!VersionCheckPatch.IS_20_31_OR_GREATER) {
+                return false;
+            }
             return commentComposerButtonsGroupList.check(buffer).isFiltered();
         }
 

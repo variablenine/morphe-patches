@@ -102,8 +102,10 @@ Second \"item\" text"</string>
 YouTube Music 8.x — το crossfade λειτουργεί μόνο στις εκδόσεις 9.x και νεότερες"</string>
   <string name="morphe_music_crossfade_about_credit_title">Εύσημα</string>
   <string name="morphe_music_crossfade_about_credit_summary">Λειτουργία Crossfade από τον VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Ενεργοποίηση μόνιμης επανάληψης</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Απομνημόνευση κατάστασης επανάληψης</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Απομνημόνευση κατάστασης τυχαιοποίησης</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Απενεργοποίηση ανακατεύθυνσης αποδοκιμασίας</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Αποτρέπει τη μετάβαση στο επόμενο κομμάτι όταν πατηθεί το κουμπί αποδοκιμασίας</string>

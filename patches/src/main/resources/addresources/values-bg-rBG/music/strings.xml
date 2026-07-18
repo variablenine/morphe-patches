@@ -102,8 +102,10 @@ Second \"item\" text"</string>
 YouTube Music 8.x — кросфейдът работи само в 9.x и по-нови версии"</string>
   <string name="morphe_music_crossfade_about_credit_title">Заслуга</string>
   <string name="morphe_music_crossfade_about_credit_summary">Функция за кросфейд от VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Включи постоянно повтаряне</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Запомни състоянието на повторение</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Запомни състоянието на разбъркване</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Изключване на пренасочването при непонравил се</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Предотвратява преминаването към следващата песен при натискане на бутона \"Не ми харесва\"</string>

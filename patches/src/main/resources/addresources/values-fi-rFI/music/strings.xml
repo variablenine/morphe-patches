@@ -102,8 +102,10 @@ Crossfaden pysäyttäminen musiikkivideon katselua varten voi jättää osan vid
 YouTube Music 8.x – crossfade toimii vain versiossa 9.x ja uudemmissa."</string>
   <string name="morphe_music_crossfade_about_credit_title">Lähde</string>
   <string name="morphe_music_crossfade_about_credit_summary">Crossfade-ominaisuuden on kehittänyt VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Ota pysyvä toisto käyttöön</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Muista toiston tila</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Muista satunnaistuksen tila</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Poista epätykkäysten uudelleenohjaus</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Estää kappaleen ohittamisen, kun epätykkäyspainiketta painetaan</string>

@@ -71,8 +71,8 @@ Second \"item\" text"</string>
   <string name="morphe_music_crossfade_video_mode_disabled_toast">Режим на видео не е достапен додека е вклучено преминувањето</string>
   <string name="morphe_music_crossfade_about_title">За апликацијата</string>
   <!-- Banner row has no text; it shows a full-width graphic via a custom layout. -->
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Вклучи перманентно повторување</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <!-- layout.buttons.hideButtonsPatch -->
   <!-- layout.hide.general.hideMusicComponentsPatch -->

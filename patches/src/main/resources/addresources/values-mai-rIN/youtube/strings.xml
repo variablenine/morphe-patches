@@ -136,7 +136,6 @@ Second \"item\" text"</string>
   <string name="morphe_hide_keyword_content_phrases_title">छिपाने के लिए कीवर्ड</string>
   <!-- For localization, it is preferred, but not required, if 'LeBlanc' is replaced with a localized name or a familiar word that has upper case letters in the middle of the word.
          This is because keywords can be in any language, and showing an example in the localized script helps convey this. -->
-  <string name="morphe_hide_keyword_content_about_title">कीवर्ड फ़िल्टरिंग के बारे में</string>
   <string name="morphe_hide_keyword_content_about_whole_words_title">पूरे शब्द मिलान करें</string>
   <!-- Translations must use a localized example. For languages that do not use spaces between words (Chinese, Japanese, etc.) the English AI example should be used since no localized examples exist. Or if using machine translations, or if nobody wants to think of a localized example, then the English 'ai' example should be left as-is. -->
   <string name="morphe_hide_keyword_content_about_whole_words_summary">डबल उद्धरण के साथ एक कीवर्ड/वाक्यांश को घेरने से वीडियो शीर्षक और चैनल नामों के आंशिक मिलान को रोका जाएगा&lt;br&gt;&lt;br&gt;उदाहरण के लिए,&lt;br&gt;&lt;b&gt;\"ai\"&lt;/b&gt; वीडियो को छिपा देगा: &lt;b&gt;AI कैसे काम करता है?&lt;/b&gt;&lt;br&gt;लेकिन यह नहीं छिपाएगा: &lt;b&gt;उचित उपयोग का क्या अर्थ है?&lt;/b&gt;</string>
