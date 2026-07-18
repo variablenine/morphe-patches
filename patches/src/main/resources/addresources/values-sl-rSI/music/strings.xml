@@ -102,8 +102,10 @@ Zaklenjeni zaslon ali obvestilo lahko na kratko pokaže zastarel status med preh
 YouTube Music 8.x – prehod deluje samo v 9.x in novejših različicah."</string>
   <string name="morphe_music_crossfade_about_credit_title">Avtorstvo</string>
   <string name="morphe_music_crossfade_about_credit_summary">Funkcija prehoda VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Omogoči trajno ponavljanje</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Zapomni stanje ponavljanja</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Zapomni stanje naključnega vrstnega reda</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Onemogoči preusmeritev všečka</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Preprečuje preskok na nasledno skladbo, ko je pritisnjen gumb »ne všeč«</string>

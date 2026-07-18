@@ -102,8 +102,10 @@ Tạm dừng hiệu ứng chuyển bài để xem video âm nhạc có thể khi
 YouTube Music 8.x – hiệu ứng chuyển tiếp chỉ chạy trên 9.x trở lên"</string>
   <string name="morphe_music_crossfade_about_credit_title">Đóng góp</string>
   <string name="morphe_music_crossfade_about_credit_summary">Hiệu ứng chuyển bài do VazerOG phát triển</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Bật lặp lại vĩnh viễn</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Ghi nhớ trạng thái lặp lại</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Ghi nhớ trạng thái xáo trộn</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Tắt tính năng chuyển hướng dislike</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Ngăn việc chuyển đến bản nhạc tiếp theo khi nhấn nút dislike</string>

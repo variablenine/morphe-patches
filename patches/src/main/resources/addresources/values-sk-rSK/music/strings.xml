@@ -102,8 +102,10 @@ Pauznutie crossfade na prezeranie hudobného videa môže spôsobiť, že niekto
 YouTube Music 8.x – crossfade funguje iba vo verzii 9.x a novších"</string>
   <string name="morphe_music_crossfade_about_credit_title">Poďakovanie</string>
   <string name="morphe_music_crossfade_about_credit_summary">Funkcia Crossfade od VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Zapnúť permanentné opakovanie prehrávania</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Zapamätať si stav opakovania</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Zapamätať si stav náhodného výberu</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <!-- layout.buttons.hideButtonsPatch -->
   <string name="morphe_music_hide_cast_button_title">Skryť tlačidlo Prenos</string>

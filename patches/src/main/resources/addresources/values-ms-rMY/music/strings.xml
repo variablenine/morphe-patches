@@ -83,8 +83,8 @@ Second \"item\" text"</string>
 YouTube Music 8.x — pudar silang hanya berkesan pada versi 9.x dan yang lebih baharu"</string>
   <string name="morphe_music_crossfade_about_credit_title">Kredit</string>
   <string name="morphe_music_crossfade_about_credit_summary">Ciri pudar silang oleh VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Dayakan ulangan kekal</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <!-- layout.buttons.hideButtonsPatch -->
   <!-- layout.hide.general.hideMusicComponentsPatch -->

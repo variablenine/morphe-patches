@@ -70,7 +70,7 @@ Second \"item\" text"</string>
   <string name="morphe_music_crossfade_on_auto_advance_title">Przenikanie przy automatycznym przełączaniu</string>
   <string name="morphe_music_crossfade_on_auto_advance_summary">Stosuje efekt przenikania, gdy utwór naturalnie dobiega końca</string>
   <string name="morphe_music_crossfade_session_control_title">Kontrola sesji</string>
-  <string name="morphe_music_crossfade_session_control_summary">Przytrzymaj przycisk losowania, aby wstrzymać lub wznowić przenikanie</string>
+  <string name="morphe_music_crossfade_session_control_summary">Przytrzymaj przycisk odtwarzania losowego, aby wstrzymać lub wznowić przenikanie</string>
   <string name="morphe_music_crossfade_paused_toast">Przenikanie wstrzymane w tej sesji</string>
   <string name="morphe_music_crossfade_resumed_toast">Przenikanie wznowione</string>
   <string name="morphe_music_crossfade_video_mode_disabled_toast">Tryb teledysku niedostępny podczas przenikania</string>
@@ -87,7 +87,7 @@ Second \"item\" text"</string>
   <string name="morphe_music_crossfade_about_best_title">Działa najlepiej przy</string>
   <string name="morphe_music_crossfade_about_best_summary">Zwykłym odtwarzaniu utwór po utworze i automatycznym przełączaniu, zapętleniu jednego utworu (utwór przenika sam w siebie) oraz przy lokalnym dźwięku - z głośnika telefonu, słuchawek przewodowych, Bluetooth lub USB</string>
   <string name="morphe_music_crossfade_about_quirks_title">Co nie działa idealnie</string>
-  <string name="morphe_music_crossfade_about_quirks_summary">"Gdy włączone jest przenikanie, teledyski odtwarzają się tylko w formie dźwiękowej (przytrzymaj przycisk losowania, aby je wstrzymać, jeśli chcesz zobaczyć film)
+  <string name="morphe_music_crossfade_about_quirks_summary">"Gdy włączone jest przenikanie, teledyski odtwarzają się tylko w formie dźwiękowej (przytrzymaj przycisk odtwarzania losowego, aby je wstrzymać, jeśli chcesz zobaczyć film)
 
 Utwory krótsze niż ustawiony czas przenikania mogą pominąć ten efekt
 
@@ -102,8 +102,10 @@ Ekran blokady lub powiadomienie może przez chwilę pokazywać nieaktualny stan 
 ​YouTube Music 8.x - przenikanie działa tylko na wersjach 9.x i nowszych"</string>
   <string name="morphe_music_crossfade_about_credit_title">Podziękowanie</string>
   <string name="morphe_music_crossfade_about_credit_summary">Funkcja przenikania autorstwa VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Włącz ciągłe zapętlanie</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Zapamiętaj stan powtarzania</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Zapamiętaj stan odtwarzania losowego</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Wyłącz pomijanie nielubianych piosenek</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Zapobiega przechodzeniu do następnego utworu po naciśnięciu łapki w dół</string>

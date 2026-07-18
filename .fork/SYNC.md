@@ -9,8 +9,8 @@ it too.
 
 ## State markers (update on every sync)
 
-- **Upstream baseline:** `dev @ 59eb43f7e1e3c30406665f193ef7bc5e79122851` (2026-07-13, v1.35.0-dev.3)
-- **Last synced upstream release:** none yet (fork baseline is ahead of upstream stable v1.34.0)
+- **Upstream baseline:** stable tag `v1.35.0` (commit `e12088c89942`)
+- **Last synced upstream release:** v1.35.0 (2026-07-18)
 
 ## What is fork-local
 
@@ -74,7 +74,7 @@ patch no longer applies cleanly):
    the `.rej` hunks manually using the semantics table above (upstream may have refactored the touched
    files). **Regenerate `.fork/upstream-delta.patch`** against the new tree afterwards so the next sync
    starts clean.
-5. Verify locally: run the `BrainrotDetectorSelfTest` with plain `javac`/`java` (must be 22/22).
+5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11).
 6. Update the state markers in this file. Commit everything as
    `bump: Sync upstream Morphe patches vX.Y.Z` (the `bump:` type produces a patch release), push to `dev`.
 7. CI is the compatibility gate: the `Build pull request` workflow must compile the bundle

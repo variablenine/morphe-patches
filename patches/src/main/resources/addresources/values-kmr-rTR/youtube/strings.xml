@@ -65,10 +65,8 @@ Guherînan têne xistine:
   <string name="morphe_hide_compact_banner_summary">Bannerên kêmkirî û valahiya di navbera pêkhateyên hinekî de veşêrin</string>
   <string name="morphe_hide_expandable_card_title">Kartên fireh ên di bin vîdyoyan de</string>
   <string name="morphe_hide_expandable_card_entry_1">Hemûyan nîşan bide</string>
-  <string name="morphe_hide_expandable_card_entry_2">Tenê karta hilberê veşêrin</string>
-  <string name="morphe_hide_expandable_card_entry_3">Tenê karta kurtkirinê veşêrin</string>
-  <string name="morphe_hide_expandable_card_entry_4">Karta hilberê û kurtkirinê veşêrin</string>
-  <string name="morphe_hide_expandable_card_entry_5">Hemûyan veşêrin</string>
+  <string name="morphe_hide_expandable_card_entry_2">Tenê karta kurteyî veşere</string>
+  <string name="morphe_hide_expandable_card_entry_3">Hemû veşere</string>
   <string name="morphe_hide_floating_microphone_button_title">Bicikên dirêj ên mikrifonê bidin veqêşînin</string>
   <string name="morphe_hide_floating_microphone_button_summary">Dugmeya mikrofonê ya mayî di kûçeya jorîn-rastê de li ser ekrana pêşniyarên lêgerînê veşêrin</string>
   <string name="morphe_hide_horizontal_shelves_title">Şelfeyên qereziya nîşandinê hidin</string>
@@ -103,6 +101,7 @@ Guherînan têne xistine:
   <string name="morphe_hide_upload_time_summary">"Senetkirîn:
 • Refên Kur, rûpelên kanalê, û encamên lêgerînê dikarin demên barkirinê nîşan bidin.
 • Li ser layouta otomobîlan xebatê neke"</string>
+  <string name="morphe_hide_video_thumbnail_title">Wêneya biçîkê vîdyoyê veşêrin</string>
   <!-- 'People also watched' and 'You might also like' should be translated using the same localized wording YouTube displays for the label. -->
   <string name="morphe_hide_video_recommendation_labels_title">Etîketên pêşniyara vîdyoyê veşêrin</string>
   <string name="morphe_hide_video_recommendation_labels_summary">Nîşanên \'Kesên din jî temaşe kirin\' û \'Şiyayî ku hûn jê hez bikirin\' di encamên lêgerînê de veşêrin</string>
@@ -236,7 +235,6 @@ Guherînan têne xistine:
 Keywords can be any text shown in video titles or channel names
 
 Words with uppercase letters in the middle must match exactly (ie: iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">Li ser filtrakirina gotinan</string>
   <string name="morphe_hide_keyword_content_about_summary">"Serê malê / Abonayî / Lêgerîn / Şîrovet bi peyvên sereke fêltirêkirin da ku naveroka ku bi hev re tê peyvên sereke veşêre
 
 Sînorkirin:
@@ -252,6 +250,36 @@ Sînorkirin:
   <string name="morphe_hide_keyword_toast_invalid_conflicting">Şêwazî dlya îqdi is ihtilafî dajan: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_length">Şêwazî xeçk di, wan pêl dahiya: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_broad">Şêwazî hemû vîdyoyên veşêre: %s</string>
+  <string name="morphe_hide_keyword_content_stats_hidden_breakdown">"• Serê: %s
+• Aboneyayîn: %s
+• Gerîn: %s
+• Şîrov: %s
+• Giştî: %s"</string>
+  <string name="morphe_hide_stats_category_title">Statistîk</string>
+  <string name="morphe_hide_stats_hidden_24h_title">Vîdyoyên hatine veşartin, 24 demjimêrên dawîn</string>
+  <string name="morphe_hide_stats_hidden_all_title">Vîdyoyên hatine veşartin, her dem</string>
+  <string name="morphe_hide_stats_hidden_24h_reset_title">Numarê 24 demjimêrên dawîn ê vekirin?</string>
+  <string name="morphe_hide_stats_hidden_all_reset_title">Têxûbê hemû demjimêrê dîsa destpêkirin?</string>
+  <string name="morphe_hide_about_category_title">Derbarê</string>
+  <string name="morphe_hide_aislist_screen_title">Filtreya kanala AI</string>
+  <string name="morphe_hide_aislist_screen_summary">Vîdyoyên ji kanalên ku ji hêla koma AiSListê ve wek naveroka çêkirî ji hêla AI-ê hatine nîşandan ve hatine veşartin</string>
+  <string name="morphe_hide_aislist_blocklist_category_title">Lîsteya blokkirinê: pêbawerîya bilind</string>
+  <string name="morphe_hide_aislist_warnlist_category_title">Lîsteya hişyarîyê: pêbawerîya navîn</string>
+  <string name="morphe_hide_aislist_hide_home_title">Vîdyoyên li ser rûpela sereke veşêrin</string>
+  <string name="morphe_hide_aislist_hide_search_title">Vîdyoyên di lêgerînê de veşêrin</string>
+  <string name="morphe_hide_aislist_stats_hidden_breakdown">"• Rûpela Sereke: %s
+• Lêgerîn: %s
+• Hemû: %s"</string>
+  <string name="morphe_hide_aislist_stats_blocklist_title">Kanalên lîsteya blokkirinê bar kirin: %s</string>
+  <string name="morphe_hide_aislist_stats_warnlist_title">Kanalên lîsteya hişyarîyê bar kirin: %s</string>
+  <string name="morphe_hide_aislist_about_summary">"Encamên ser rûpela sereke û lêgerînê hatine fîlterkirin da ku vîdyoyên ji kanalên ku ji hêla AiSListê ve hatine nîşandan veşêrin.
+
+Sînorkirin:
+• Kurtefîlmên AI-yê yên fîlterkirî dibin valahiyek vala
+• Dibe ku hinek vîdyoyên AI-yê hîn jî nîşan bidin"</string>
+  <string name="morphe_hide_aislist_attribution_summary">"Daneyan ji hêla AiSListê ve hatine peyda kirin.
+
+Bike li vir da vekirina AiSlopList.com û dîsa dîtina barkirina platformên din"</string>
   <!-- ad.hideAdsPatch -->
   <string name="morphe_hide_creator_store_shelf_title">Daste bibin zivaniyê qewryn</string>
   <string name="morphe_hide_end_screen_store_banner_title">Bannera firoşgeya store\'yê ekranê dabezîne</string>

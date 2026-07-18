@@ -27,7 +27,6 @@ Second \"item\" text"</string>
   <!-- layout.disableLayoutUpdatesPatch -->
   <!-- layout.hide.general.hideLayoutComponentsPatch -->
   <string name="morphe_hide_expandable_card_entry_1">Баарын көрсөтүү</string>
-  <string name="morphe_hide_expandable_card_entry_5">Баарын жашыруу</string>
   <!-- 'Latest videos' should be translated using the same localized wording YouTube displays for the button.
           This button usually appears in the Home feed for refreshing the feed. -->
   <!-- 'Notify me' should be translated using the same localized wording YouTube displays for the button.

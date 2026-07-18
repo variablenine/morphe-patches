@@ -64,10 +64,8 @@ Second \"item\" text"</string>
   <string name="morphe_hide_compact_banner_summary">일부 구성 요소 사이에서 소형 배너 및 여백을 숨깁니다</string>
   <string name="morphe_hide_expandable_card_title">동영상 아래 펼쳐볼 수 있는 정보</string>
   <string name="morphe_hide_expandable_card_entry_1">모두 표시</string>
-  <string name="morphe_hide_expandable_card_entry_2">제품 정보만 숨기기</string>
-  <string name="morphe_hide_expandable_card_entry_3">요약 정보만 숨기기</string>
-  <string name="morphe_hide_expandable_card_entry_4">제품 및 요약 정보 숨기기</string>
-  <string name="morphe_hide_expandable_card_entry_5">모두 숨기기</string>
+  <string name="morphe_hide_expandable_card_entry_2">요약 정보만 숨기기</string>
+  <string name="morphe_hide_expandable_card_entry_3">모두 숨기기</string>
   <string name="morphe_hide_floating_microphone_button_title">플로팅 마이크 버튼 숨기기</string>
   <string name="morphe_hide_floating_microphone_button_summary">검색 추천 화면 오른쪽 하단에 있는 플로팅 마이크 버튼을 숨깁니다</string>
   <string name="morphe_hide_horizontal_shelves_title">좌우 슬라이드형 선반 숨기기</string>
@@ -102,6 +100,7 @@ Second \"item\" text"</string>
   <string name="morphe_hide_upload_time_summary">"제한 사항:
 • Shorts 선반, 채널 페이지 및 검색 결과에서 업로드 시간이 계속 표시될 수 있습니다
 • 이 기능은 오토모티브 레이아웃에서 작동하지 않습니다"</string>
+  <string name="morphe_hide_video_thumbnail_title">동영상 썸네일 숨기기</string>
   <!-- 'People also watched' and 'You might also like' should be translated using the same localized wording YouTube displays for the label. -->
   <string name="morphe_hide_video_recommendation_labels_title">동영상 추천 라벨 숨기기</string>
   <string name="morphe_hide_video_recommendation_labels_summary">검색 결과에서 다음 라벨을 숨깁니다:\n• 시청자가 이 동영상도 시청함\n• 내가 좋아할 만한 동영상</string>
@@ -235,7 +234,6 @@ Second \"item\" text"</string>
 필터링 키워드는 채널 이름 또는 동영상 제목에 표시되는 모든 텍스트가 될 수 있습니다
 
 대문자가 있는 단어는 대소문자를 함께 입력해야 합니다 (예: iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">키워드 필터링 정보</string>
   <string name="morphe_hide_keyword_content_about_summary">"홈 / 구독 / 검색 결과 / 댓글 섹션에서 키워드 구문과 일치하는 콘텐츠가 필터링되어 숨겨집니다
 
 제한 사항:
@@ -251,6 +249,36 @@ Second \"item\" text"</string>
   <string name="morphe_hide_keyword_toast_invalid_conflicting">키워드에 충돌하는 선언이 있습니다: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_length">키워드가 너무 짧아서 따옴표가 필요합니다: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_broad">키워드가 모든 동영상을 숨길 것입니다: %s</string>
+  <string name="morphe_hide_keyword_content_stats_hidden_breakdown">"• 홈: %s
+• 구독: %s
+• 검색: %s
+• 댓글: %s
+• 합계: %s"</string>
+  <string name="morphe_hide_stats_category_title">통계</string>
+  <string name="morphe_hide_stats_hidden_24h_title">지난 24시간 동안 숨겨진 동영상</string>
+  <string name="morphe_hide_stats_hidden_all_title">전체 시간 동안 숨겨진 동영상</string>
+  <string name="morphe_hide_stats_hidden_24h_reset_title">지난 24시간 카운터 초기화</string>
+  <string name="morphe_hide_stats_hidden_all_reset_title">전체 시간 카운터 초기화</string>
+  <string name="morphe_hide_about_category_title">정보</string>
+  <string name="morphe_hide_aislist_screen_title">AI 채널 필터</string>
+  <string name="morphe_hide_aislist_screen_summary">AiSList 커뮤니티 목록에서 AI 생성 콘텐츠 채널로 지정된 채널의 동영상을 숨깁니다</string>
+  <string name="morphe_hide_aislist_blocklist_category_title">차단 목록: 높은 신뢰도</string>
+  <string name="morphe_hide_aislist_warnlist_category_title">경고 목록: 보통 신뢰도</string>
+  <string name="morphe_hide_aislist_hide_home_title">홈에서 동영상 숨기기</string>
+  <string name="morphe_hide_aislist_hide_search_title">검색에서 동영상 숨기기</string>
+  <string name="morphe_hide_aislist_stats_hidden_breakdown">"• 홈: %s
+• 검색: %s
+• 합계: %s"</string>
+  <string name="morphe_hide_aislist_stats_blocklist_title">차단 목록 채널 수: %s</string>
+  <string name="morphe_hide_aislist_stats_warnlist_title">경고 목록 채널 수: %s</string>
+  <string name="morphe_hide_aislist_about_summary">"홈 및 검색 결과에서 AiSList에 의해 지정된 채널의 동영상을 숨기도록 필터링됩니다
+
+제한 사항:
+• 필터링된 AI Shorts는 빈 공간으로 표시될 수 있습니다
+• 일부 AI 동영상은 여전히 표시될 수 있습니다"</string>
+  <string name="morphe_hide_aislist_attribution_summary">"데이터는 AiSList에 의해 제공됩니다
+
+다른 플랫폼용 다운로드를 확인하려면 여기를 탭하여 'AiSlopList.com'으로 이동하세요"</string>
   <!-- ad.hideAdsPatch -->
   <string name="morphe_hide_creator_store_shelf_title">판매자 스토어 선반 숨기기</string>
   <string name="morphe_hide_end_screen_store_banner_title">최종 화면 스토어 배너 숨기기</string>

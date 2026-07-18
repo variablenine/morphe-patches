@@ -102,8 +102,10 @@ Second \"item\" text"</string>
 YouTube Music 8.x - يعمل الانتقال التدريجي فقط على الإصدار 9.x والإصدارات الأحدث"</string>
   <string name="morphe_music_crossfade_about_credit_title">حقوق الملكية</string>
   <string name="morphe_music_crossfade_about_credit_summary">ميزة Transitions مقدمة من VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">تمكين التكرار الدائم</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">تذكر حالة التكرار</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">تذكر حالة التشغيل العشوائي</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">تعطيل إعادة توجيه الإعجاب الشديد</string>
   <string name="morphe_music_disable_dislike_redirection_summary">يمنع الانتقال إلى المقطع التالي عند الضغط على زر عدم الإعجاب</string>

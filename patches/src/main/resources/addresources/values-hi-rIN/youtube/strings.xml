@@ -64,10 +64,8 @@ Second \"item\" text"</string>
   <string name="morphe_hide_compact_banner_summary">कॉम्पैक्ट बैनर और कुछ घटकों के बीच दूरी को छुपाता है</string>
   <string name="morphe_hide_expandable_card_title">वीडियो के नीचे विस्तार योग्य कार्ड</string>
   <string name="morphe_hide_expandable_card_entry_1">सभी दिखाएं</string>
-  <string name="morphe_hide_expandable_card_entry_2">केवल उत्पाद कार्ड छुपाएं</string>
-  <string name="morphe_hide_expandable_card_entry_3">केवल सारांश कार्ड छुपाएं</string>
-  <string name="morphe_hide_expandable_card_entry_4">उत्पाद और सारांश कार्ड छुपाएं</string>
-  <string name="morphe_hide_expandable_card_entry_5">सभी छुपाएं</string>
+  <string name="morphe_hide_expandable_card_entry_2">सारांश कार्ड केवल छिपाएं</string>
+  <string name="morphe_hide_expandable_card_entry_3">सभी छिपाएं</string>
   <string name="morphe_hide_floating_microphone_button_title">छुपाएं तैरती माइक्रोफोन बटन</string>
   <string name="morphe_hide_floating_microphone_button_summary">खोज सुझाव स्क्रीन के निचले-दाएं कोने में फ्लोटिंग माइक्रोफ़ोन बटन को छुपाता है</string>
   <string name="morphe_hide_horizontal_shelves_title">छुपाएं क्षैतिज रैक</string>
@@ -102,6 +100,7 @@ Second \"item\" text"</string>
   <string name="morphe_hide_upload_time_summary">"सीमाएँ:
 • शॉर्ट्स शेल्फ, चैनल पेज और खोज परिणाम अभी भी अपलोड का समय दिखा सकते हैं
 • यह सुविधा ऑटोमोटिव लेआउट के साथ काम नहीं करती है"</string>
+  <string name="morphe_hide_video_thumbnail_title">वीडियो थंबनेल छुपाएं</string>
   <!-- 'People also watched' and 'You might also like' should be translated using the same localized wording YouTube displays for the label. -->
   <string name="morphe_hide_video_recommendation_labels_title">छुपाएं वीडियो सिफारिश लेबल</string>
   <string name="morphe_hide_video_recommendation_labels_summary">खोज परिणामों में \'लोग भी देखे\' और \'आपको भी पसंद आ सकते हैं\' लेबल को छुपाता है</string>
@@ -235,7 +234,6 @@ Second \"item\" text"</string>
 कीवर्ड चैनल के नाम या वीडियो शीर्षक में दिखाई देने वाला कोई भी टेक्स्ट हो सकता है
 
 मध्य में बड़े अक्षरों वाले शब्दों को उसी केसिंग में दर्ज किया जाना चाहिए (जैसे: iPhone, TikTok, LeBlanc)"</string>
-  <string name="morphe_hide_keyword_content_about_title">कीवर्ड फ़िल्टरिंग के बारे में</string>
   <string name="morphe_hide_keyword_content_about_summary">"होम / सदस्यताएँ / खोज / टिप्पणियाँ कीवर्ड वाक्यांशों से मेल खाने वाली सामग्री को छिपाने के लिए फ़िल्टर की जाती हैं
 
 सीमाएँ:
@@ -251,6 +249,36 @@ Second \"item\" text"</string>
   <string name="morphe_hide_keyword_toast_invalid_conflicting">कीवर्ड के घोषणाओं में संघर्ष है: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_length">कीवर्ड बहुत छोटा है और क्वोटेस की आवश्यकता है: %s</string>
   <string name="morphe_hide_keyword_toast_invalid_broad">कीवर्ड सभी वीडियो को छुपाएगा: %s</string>
+  <string name="morphe_hide_keyword_content_stats_hidden_breakdown">"• होम: %s
+• सदस्यताएँ: %s
+• खोज: %s
+• टिप्पणियाँ: %s
+• कुल: %s"</string>
+  <string name="morphe_hide_stats_category_title">आंकड़े</string>
+  <string name="morphe_hide_stats_hidden_24h_title">पिछले 24 घंटों में छिपे हुए वीडियो</string>
+  <string name="morphe_hide_stats_hidden_all_title">सभी समय के लिए छिपे हुए वीडियो</string>
+  <string name="morphe_hide_stats_hidden_24h_reset_title">पिछले 24 घंटों के काउंटर को रीसेट करें?</string>
+  <string name="morphe_hide_stats_hidden_all_reset_title">क्या सभी समय काउंटर रीसेट करें?</string>
+  <string name="morphe_hide_about_category_title">इसके बारे में</string>
+  <string name="morphe_hide_aislist_screen_title">AI चैनल फ़िल्टर</string>
+  <string name="morphe_hide_aislist_screen_summary">AiSList समुदाय सूची द्वारा AI-जनित सामग्री के रूप में चिह्नित चैनलों से वीडियो छिपाएँ</string>
+  <string name="morphe_hide_aislist_blocklist_category_title">ब्लॉकसूची: उच्च आत्मविश्वास</string>
+  <string name="morphe_hide_aislist_warnlist_category_title">चेतावनी सूची: मध्यम आत्मविश्वास</string>
+  <string name="morphe_hide_aislist_hide_home_title">होम में वीडियो छिपाएँ</string>
+  <string name="morphe_hide_aislist_hide_search_title">खोज में वीडियो छिपाएँ</string>
+  <string name="morphe_hide_aislist_stats_hidden_breakdown">"• होम: %s
+• खोज: %s
+• कुल: %s"</string>
+  <string name="morphe_hide_aislist_stats_blocklist_title">ब्लॉकसूची चैनल लोड किए गए: %s</string>
+  <string name="morphe_hide_aislist_stats_warnlist_title">चेतावनी सूची चैनल लोड किए गए: %s</string>
+  <string name="morphe_hide_aislist_about_summary">"होम और खोज परिणामों को AiSList द्वारा चिह्नित चैनलों से वीडियो छिपाने के लिए फ़िल्टर किया गया है
+
+सीमाएँ:
+• फ़िल्टर किए गए AI शॉर्ट्स एक खाली स्थान के रूप में दिखाई दे सकते हैं
+• कुछ AI वीडियो अभी भी दिखाई दे सकते हैं"</string>
+  <string name="morphe_hide_aislist_attribution_summary">"डेटा AiSList द्वारा प्रदान किया गया है
+
+अन्य प्लेटफार्मों के लिए डाउनलोड देखने के लिए यहां टैप करें AiSlopList.com"</string>
   <!-- ad.hideAdsPatch -->
   <string name="morphe_hide_creator_store_shelf_title">छुपाएं क्रिएटर स्टोर शेल्फ</string>
   <string name="morphe_hide_end_screen_store_banner_title">छुपाएं अंत पर्दे स्टोर बैनर</string>

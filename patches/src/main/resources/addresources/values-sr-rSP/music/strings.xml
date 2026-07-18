@@ -102,8 +102,10 @@ Second \"item\" text"</string>
 YouTube Music 8.x — прелазак ради само на 9.x и новијим верзијама"</string>
   <string name="morphe_music_crossfade_about_credit_title">Заслуге</string>
   <string name="morphe_music_crossfade_about_credit_summary">Функција преласка од стране VazerOG</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">Омогући трајно понављање</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">Запамти стање понављања</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">Запамти стање случајног редоследа</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
   <string name="morphe_music_disable_dislike_redirection_title">Искључи преусмерење нелајковања</string>
   <string name="morphe_music_disable_dislike_redirection_summary">Спречава прелазак на следећу нумеру када се притисне дугме за нелајковање</string>

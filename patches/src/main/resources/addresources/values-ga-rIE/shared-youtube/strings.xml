@@ -31,7 +31,7 @@ Second \"item\" text"</string>
   <string name="morphe_external_downloader_package_not_found_warning">"Ní féidir an aip suiteáilte a aimsiú le hainm pacáiste: %s
 
 Seiceáil go bhfuil an t-ainm pacáiste ceart agus go bhfuil an aip suiteáilte"</string>
-  <string name="morphe_external_downloader_empty_warning">Ní féidir ainm an phacáiste a bheith folamh</string>
+  <string name="morphe_external_downloader_empty_warning">Ní féidir ainm an phacáiste a fhágáil folamh</string>
   <!-- Translations of this should be identical to morphe_custom_branding_icon_entry_7 -->
   <string name="morphe_custom_branding_name_entry_5">Saincheaptha</string>
   <string name="morphe_custom_branding_icon_title">Deilbhín aip</string>

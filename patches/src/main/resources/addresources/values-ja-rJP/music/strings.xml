@@ -102,11 +102,13 @@ YouTube Music 9.x 以降が必要です。"</string>
 YouTube Music 8.x — クロスフェードは9.x以降でのみ実行されます。"</string>
   <string name="morphe_music_crossfade_about_credit_title">クレジット</string>
   <string name="morphe_music_crossfade_about_credit_summary">Crossfade機能はVazerOGによるものです</string>
-  <!-- interaction.permanentrepeat.permanentRepeatPatch -->
-  <string name="morphe_music_play_permanent_repeat_title">常時リピートを有効化</string>
+  <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
+  <string name="morphe_music_remember_repeat_state_title">リピート再生の状態を保存</string>
+  <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <string name="morphe_music_remember_shuffle_state_title">シャッフル再生の状態を保存</string>
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
-  <string name="morphe_music_disable_dislike_redirection_title">不快感リダイレクトを無効にする</string>
-  <string name="morphe_music_disable_dislike_redirection_summary">「いいね」ボタンが押されたときに次のトラックへスキップするのを防ぎます</string>
+  <string name="morphe_music_disable_dislike_redirection_title">低評価リダイレクトを無効化</string>
+  <string name="morphe_music_disable_dislike_redirection_summary">低評価ボタンを押したとき、次の曲へリダイレクトされるのを防止する</string>
   <!-- layout.buttons.hideButtonsPatch -->
   <string name="morphe_music_hide_cast_button_title">キャストボタンを非表示</string>
   <string name="morphe_music_hide_history_button_title">履歴ボタンを非表示</string>

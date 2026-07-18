@@ -698,10 +698,10 @@ index 0000000..ede7d41
 +    }
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-index 124514c..933a394 100644
+index 17a2a2e..5b5be41 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-@@ -204,6 +204,7 @@ public class Settings extends SharedYouTubeSettings {
+@@ -222,6 +222,7 @@ public class Settings extends SharedYouTubeSettings {
      public static final BooleanSetting SANITIZE_VIDEO_SUBTITLE = new BooleanSetting("morphe_sanitize_video_subtitle", FALSE);
  
      // Overlay buttons
@@ -709,7 +709,7 @@ index 124514c..933a394 100644
      public static final BooleanSetting COPY_VIDEO_LINK_BUTTON = new BooleanSetting("morphe_copy_video_link_button", FALSE, true);
      public static final BooleanSetting COPY_VIDEO_LINK_WITH_TIMESTAMP_BUTTON = new BooleanSetting("morphe_copy_video_link_with_timestamp_button", TRUE, true, parent(COPY_VIDEO_LINK_BUTTON));
      public static final BooleanSetting HIDE_AUTOPLAY_BUTTON = new BooleanSetting("morphe_hide_autoplay_button", TRUE, true);
-@@ -281,6 +282,7 @@ public class Settings extends SharedYouTubeSettings {
+@@ -299,6 +300,7 @@ public class Settings extends SharedYouTubeSettings {
      public static final BooleanSetting HIDE_COMMENTS_GIFT_ANIMATION_AND_CARDS = new BooleanSetting("morphe_hide_comments_gift_animation_and_cards", FALSE);
      public static final BooleanSetting HIDE_COMMENTS_GIFT_BUTTON = new BooleanSetting("morphe_hide_comments_gift_button", TRUE, true);
      public static final BooleanSetting HIDE_COMMENTS_INFO_BUTTON = new BooleanSetting("morphe_hide_comments_info_button", FALSE, true);
@@ -1081,10 +1081,10 @@ index 0000000..0e0013f
 +    }
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
-index 3f99f42..c3555b7 100644
+index eb10e7e..76b6fa5 100644
 --- a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
-@@ -77,6 +77,8 @@ private const val DESCRIPTION_COMPONENTS_FILTER =
+@@ -78,6 +78,8 @@ private const val DESCRIPTION_COMPONENTS_FILTER =
      "Lapp/morphe/extension/youtube/patches/components/DescriptionComponentsFilter;"
  private const val COMMENTS_FILTER =
      "Lapp/morphe/extension/youtube/patches/components/CommentsFilter;"
@@ -1093,7 +1093,7 @@ index 3f99f42..c3555b7 100644
  private const val CUSTOM_FILTER =
      "Lapp/morphe/extension/youtube/patches/components/CustomFilter;"
  private const val KEYWORD_FILTER =
-@@ -152,6 +154,7 @@ val hideLayoutComponentsPatch = bytecodePatch(
+@@ -155,6 +157,7 @@ val hideLayoutComponentsPatch = bytecodePatch(
                              inputType = InputType.TEXT_MULTI_LINE
                          )
                      ),
@@ -1101,19 +1101,19 @@ index 3f99f42..c3555b7 100644
                      SwitchPreference("morphe_hide_comments_ai_chat_summary"),
                      SwitchPreference("morphe_hide_comments_channel_guidelines"),
                      SwitchPreference("morphe_hide_comments_prompts", summary = true),
-@@ -314,6 +317,7 @@ val hideLayoutComponentsPatch = bytecodePatch(
+@@ -392,6 +395,7 @@ val hideLayoutComponentsPatch = bytecodePatch(
          addLithoFilter(LAYOUT_COMPONENTS_FILTER)
          addLithoFilter(DESCRIPTION_COMPONENTS_FILTER)
          addLithoFilter(COMMENTS_FILTER)
 +        addLithoFilter(BRAINROT_COMMENT_FILTER)
          addLithoFilter(KEYWORD_FILTER)
+         addLithoFilter(AISLIST_FILTER)
          addLithoFilter(CUSTOM_FILTER)
-         addSpanFilter(SANITIZE_VIDEO_SUBTITLE_FILTER)
 diff --git a/patches/src/main/resources/addresources/values/youtube/strings.xml b/patches/src/main/resources/addresources/values/youtube/strings.xml
-index 5e93ca5..6d2b7b2 100644
+index 3acb2ad..46f138e 100644
 --- a/patches/src/main/resources/addresources/values/youtube/strings.xml
 +++ b/patches/src/main/resources/addresources/values/youtube/strings.xml
-@@ -209,6 +209,8 @@ Changes include:
+@@ -208,6 +208,8 @@ Changes include:
  • If all carousel items are hidden, the entire comments section will also be hidden"</string>
      <string name="morphe_hide_comments_carousel_filter_strings_title">Comments carousel filter</string>
      <string name="morphe_hide_comments_carousel_filter_strings_summary">Enter the comments carousel names to filter by, separated by new lines</string>
@@ -1122,7 +1122,7 @@ index 5e93ca5..6d2b7b2 100644
      <string name="morphe_hide_comments_ai_chat_summary_title">Hide AI chat summary</string>
      <string name="morphe_hide_comments_channel_guidelines_title">Hide channel guidelines</string>
      <string name="morphe_hide_comments_prompts_title">Hide comment prompts</string>
-@@ -290,6 +292,8 @@ Limitations:
+@@ -321,6 +323,8 @@ Tap here to open AiSlopList.com and see downloads for other platforms"</string>
      <!-- interaction.copyvideolink.copyVideoLinkButtonPatch -->
      <string name="morphe_share_copy_link_button_success">Link copied to clipboard</string>
      <string name="morphe_share_copy_link_with_timestamp_button_success">Link with timestamp copied to clipboard</string>
