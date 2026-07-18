@@ -49,7 +49,7 @@ patch no longer applies cleanly):
 | File | Change |
 |---|---|
 | `patches/build.gradle.kts` | `group = "app.variablenine"`; personalized `about {}` block (name "variablenine Patches", fork notice, source URL). |
-| `.github/workflows/release.yml` | Add `issues: write` and `pull-requests: write` to job permissions. |
+| `.github/workflows/release.yml` | Add `issues: write` and `pull-requests: write` to job permissions. **Remove** the Morphe-only tail steps (`Generate website deploy token` → `Trigger website deploy` → `Wait/Setup Python/Send FCM push`): they dispatch to `MorpheApp/morphe-website` and push FCM to Morphe's app users via secrets this fork lacks, so they only ever fail on a published release and email the owner. Keep them removed on every sync. Also renames the Attest `subject-name` to "variablenine Patches". |
 | `.github/workflows/open_pull_request.yml` | Add workflow-level `permissions: contents: read, pull-requests: write`. |
 
 ### 2. Fork-owned files — restore after overlay (never take upstream's version)
