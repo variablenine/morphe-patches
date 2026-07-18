@@ -35,15 +35,15 @@ filter, leave upstream's *Hide comments by keywords* setting off.
 ## 🩹 Patches list
 
 <!-- PATCHES_START -->
-> **[v1.1.2](https://github.com/variablenine/morphe-patches/releases/tag/v1.1.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;126 patches total
+> **[v1.1.3](https://github.com/variablenine/morphe-patches/releases/tag/v1.1.3)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;127 patches total
 <details>
 <summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;73 patches</summary>
 <br>
 
 **🎯 Supported versions:**
 
-| 🧪&nbsp;21.26.360 | 🧪&nbsp;21.25.523 | 🧪&nbsp;21.24.360 | 🧪&nbsp;21.05.265 | 20.51.39 | 20.31.42 | 20.21.37 |
-| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 🧪&nbsp;21.26.360 | 🧪&nbsp;21.25.523 | 🧪&nbsp;21.24.360 | 🧪&nbsp;21.05.265 | 21.04.223 | 20.51.39 | 20.31.42 | 20.21.37 |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
@@ -124,7 +124,7 @@ filter, leave upstream's *Hide comments by keywords* setting off.
 </details>
 
 <details>
-<summary>📦 YouTube Music&nbsp;&nbsp;•&nbsp;&nbsp;34 patches</summary>
+<summary>📦 YouTube Music&nbsp;&nbsp;•&nbsp;&nbsp;35 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -159,7 +159,8 @@ filter, leave upstream's *Hide comments by keywords* setting off.
 | [Miniplayer previous and next buttons](#miniplayer-previous-and-next-buttons) | Adds options to show previous and next track buttons in the miniplayer. |  |
 | [Navigation bar](#navigation-bar) | Adds options to hide navigation bar, labels and buttons. |  |
 | [Network proxy](#network-proxy) | Adds settings to route supported network requests through an HTTP or HTTPS proxy. |  |
-| [Permanent repeat](#permanent-repeat) | Adds an option to always repeat even if the playlist ends or another track is played. |  |
+| [Remember repeat state](#remember-repeat-state) | Adds an option to remember the repeat state when playing a new track or playlist. |  |
+| [Remember shuffle state](#remember-shuffle-state) | Adds an option to remember the shuffle state when playing a new track or playlist. |  |
 | [Remove background playback restrictions](#remove-background-playback-restrictions) | Removes restrictions on background playback, including playing kids videos in the background. |  |
 | [Sanitize sharing links](#sanitize-sharing-links) | Removes the tracking query parameters from shared links. |  |
 | [Scrobbling](#scrobbling) | Adds options to add played tracks to Last.fm and ListenBrainz. |  |
