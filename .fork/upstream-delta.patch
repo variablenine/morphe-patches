@@ -1183,10 +1183,10 @@ index 3acb2ad..46f138e 100644
      <string name="morphe_copy_video_link_with_timestamp_button_title">Copy timestamp by default</string>
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
 new file mode 100644
-index 0000000..5752db8
+index 0000000..8629ca8
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,39 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<vector xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:width="24dp"
@@ -1194,28 +1194,44 @@ index 0000000..5752db8
 +    android:viewportWidth="24"
 +    android:viewportHeight="24">
 +
++    <!-- Head outline: rounded blob with soft ear tips, matching YouTube's
++         outline icon style (white stroke, round caps/joins, open interior). -->
++    <path
++        android:strokeColor="@android:color/white"
++        android:strokeWidth="1.9"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:pathData="M5.8,9.4
++            C5.5,8.0 5.4,6.2 6.0,4.9
++            C6.15,4.55 6.6,4.45 6.9,4.7
++            C8.0,5.6 9.0,6.3 10.0,6.7
++            C11.3,6.35 12.7,6.35 14.0,6.7
++            C15.0,6.3 16.0,5.6 17.1,4.7
++            C17.4,4.45 17.85,4.55 18.0,4.9
++            C18.6,6.2 18.5,8.0 18.2,9.4
++            C19.3,10.6 19.9,12.1 19.9,13.6
++            C19.9,17.0 16.4,19.6 12.0,19.6
++            C7.6,19.6 4.1,17.0 4.1,13.6
++            C4.1,12.1 4.7,10.6 5.8,9.4
++            Z" />
 +    <path
 +        android:fillColor="@android:color/white"
-+        android:pathData="M4,3 L9.5,8.2 A6.4,6.4 0 0 1 14.5,8.2 L20,3 L18.6,10.2 A6.4,6.4 0 1 1 5.4,10.2 Z" />
++        android:pathData="M9.2,12.7 m-1.1,0 a1.1,1.1 0 1 0 2.2,0 a1.1,1.1 0 1 0 -2.2,0 Z" />
 +    <path
-+        android:fillColor="#FF202020"
-+        android:pathData="M9.3,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
++        android:fillColor="@android:color/white"
++        android:pathData="M14.8,12.7 m-1.1,0 a1.1,1.1 0 1 0 2.2,0 a1.1,1.1 0 1 0 -2.2,0 Z" />
 +    <path
-+        android:fillColor="#FF202020"
-+        android:pathData="M14.7,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
-+    <path
-+        android:fillColor="#FF202020"
-+        android:strokeColor="#FF202020"
-+        android:strokeWidth="0.6"
-+        android:pathData="M12,14.4 L12,16 M12,16 L10.6,16.9 M12,16 L13.4,16.9" />
++        android:strokeColor="@android:color/white"
++        android:strokeWidth="1.5"
++        android:strokeLineCap="round"
++        android:pathData="M9.9,15.9 C10.5,16.8 11.4,16.8 12.0,16.1 C12.6,16.8 13.5,16.8 14.1,15.9" />
 +</vector>
-\ No newline at end of file
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 new file mode 100644
-index 0000000..5752db8
+index 0000000..c320a0f
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,39 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<vector xmlns:android="http://schemas.android.com/apk/res/android"
 +    android:width="24dp"
@@ -1223,22 +1239,38 @@ index 0000000..5752db8
 +    android:viewportWidth="24"
 +    android:viewportHeight="24">
 +
++    <!-- Bold-icon variant: same cat face as morphe_yt_cat_lock_button,
++         thicker strokes to match YouTube's bold player icon setting. -->
++    <path
++        android:strokeColor="@android:color/white"
++        android:strokeWidth="2.4"
++        android:strokeLineCap="round"
++        android:strokeLineJoin="round"
++        android:pathData="M5.8,9.4
++            C5.5,8.0 5.4,6.2 6.0,4.9
++            C6.15,4.55 6.6,4.45 6.9,4.7
++            C8.0,5.6 9.0,6.3 10.0,6.7
++            C11.3,6.35 12.7,6.35 14.0,6.7
++            C15.0,6.3 16.0,5.6 17.1,4.7
++            C17.4,4.45 17.85,4.55 18.0,4.9
++            C18.6,6.2 18.5,8.0 18.2,9.4
++            C19.3,10.6 19.9,12.1 19.9,13.6
++            C19.9,17.0 16.4,19.6 12.0,19.6
++            C7.6,19.6 4.1,17.0 4.1,13.6
++            C4.1,12.1 4.7,10.6 5.8,9.4
++            Z" />
 +    <path
 +        android:fillColor="@android:color/white"
-+        android:pathData="M4,3 L9.5,8.2 A6.4,6.4 0 0 1 14.5,8.2 L20,3 L18.6,10.2 A6.4,6.4 0 1 1 5.4,10.2 Z" />
++        android:pathData="M9.2,12.7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 Z" />
 +    <path
-+        android:fillColor="#FF202020"
-+        android:pathData="M9.3,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
++        android:fillColor="@android:color/white"
++        android:pathData="M14.8,12.7 m-1.2,0 a1.2,1.2 0 1 0 2.4,0 a1.2,1.2 0 1 0 -2.4,0 Z" />
 +    <path
-+        android:fillColor="#FF202020"
-+        android:pathData="M14.7,12.2 m-1,0 a1,1 0 1 0 2,0 a1,1 0 1 0 -2,0 Z" />
-+    <path
-+        android:fillColor="#FF202020"
-+        android:strokeColor="#FF202020"
-+        android:strokeWidth="0.6"
-+        android:pathData="M12,14.4 L12,16 M12,16 L10.6,16.9 M12,16 L13.4,16.9" />
++        android:strokeColor="@android:color/white"
++        android:strokeWidth="1.9"
++        android:strokeLineCap="round"
++        android:pathData="M9.9,15.9 C10.5,16.8 11.4,16.8 12.0,16.1 C12.6,16.8 13.5,16.8 14.1,15.9" />
 +</vector>
-\ No newline at end of file
 diff --git a/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
 new file mode 100644
 index 0000000..33814e4
