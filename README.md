@@ -35,7 +35,7 @@ filter, leave upstream's *Hide comments by keywords* setting off.
 ## 🩹 Patches list
 
 <!-- PATCHES_START -->
-> **[v1.1.3](https://github.com/variablenine/morphe-patches/releases/tag/v1.1.3)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;127 patches total
+> **[v1.1.4](https://github.com/variablenine/morphe-patches/releases/tag/v1.1.4)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;127 patches total
 <details>
 <summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;73 patches</summary>
 <br>
