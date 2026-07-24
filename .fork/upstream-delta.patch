@@ -793,15 +793,13 @@ index 9c78b574..b73db021 100644
              super.dispatchTouchEvent(ev)
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 new file mode 100644
-index 00000000..3c366d0b
+index 00000000..7c0c98e5
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,46 @@
 +package app.morphe.extension.youtube.videoplayer;
 +
 +import android.view.View;
-+
-+import androidx.annotation.Nullable;
 +
 +import app.morphe.extension.shared.Logger;
 +import app.morphe.extension.youtube.patches.catlock.CatLockOverlay;
@@ -809,8 +807,9 @@ index 00000000..3c366d0b
 +
 +/**
 + * Top player-controls button that engages {@link CatLockOverlay}. Mirrors the other Morphe
-+ * player-overlay buttons (e.g. ExternalDownloadButton) so it rides the same initialize/visibility
-+ * injection points.
++ * player-overlay buttons (e.g. ExternalDownloadButton) so it rides the same initialize
++ * injection point. {@link LegacyPlayerControlButton} derives its own visibility from the
++ * setting, so no separate visibility injection points are needed.
 + */
 +@SuppressWarnings("unused")
 +public class CatLockButton {
@@ -821,47 +820,23 @@ index 00000000..3c366d0b
 +        }
 +    }
 +
-+    @Nullable
-+    private static LegacyPlayerControlButton legacy;
-+
 +    /**
 +     * Injection point.
 +     */
 +    public static void initializeLegacyButton(View controlsView) {
 +        try {
-+            legacy = new LegacyPlayerControlButton(
++            new LegacyPlayerControlButton(
 +                    controlsView,
 +                    "morphe_cat_lock_button",
 +                    null,
 +                    "morphe_yt_cat_lock_button",
-+                    Settings.CAT_LOCK_BUTTON::get,
++                    Settings.CAT_LOCK_BUTTON,
 +                    CatLockButton::onClick,
 +                    null
 +            );
 +        } catch (Exception ex) {
 +            Logger.printException(() -> "Cat lock initializeButton failure", ex);
 +        }
-+    }
-+
-+    /**
-+     * Injection point.
-+     */
-+    public static void setVisibilityNegatedImmediate() {
-+        if (legacy != null) legacy.setVisibilityNegatedImmediate();
-+    }
-+
-+    /**
-+     * Injection point.
-+     */
-+    public static void setVisibilityImmediate(boolean visible) {
-+        if (legacy != null) legacy.setVisibilityImmediate(visible);
-+    }
-+
-+    /**
-+     * Injection point.
-+     */
-+    public static void setVisibility(boolean visible, boolean animated) {
-+        if (legacy != null) legacy.setVisibility(visible, animated);
 +    }
 +
 +    private static void onClick(View view) {
@@ -1058,10 +1033,10 @@ index 392e0e54..2b6a57f0 100644
  }
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
 new file mode 100644
-index 00000000..0e0013f1
+index 00000000..9810429f
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,66 @@
 +package app.morphe.patches.youtube.interaction.catlock
 +
 +import app.morphe.patcher.patch.bytecodePatch
@@ -1069,7 +1044,6 @@ index 00000000..0e0013f1
 +import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
 +import app.morphe.patches.youtube.misc.playercontrols.addTopControl
 +import app.morphe.patches.youtube.misc.playercontrols.initializeTopControl
-+import app.morphe.patches.youtube.misc.playercontrols.injectVisibilityCheckCall
 +import app.morphe.patches.youtube.misc.playercontrols.legacyPlayerControlsPatch
 +import app.morphe.patches.youtube.misc.settings.PreferenceScreen
 +import app.morphe.patches.youtube.misc.settings.settingsPatch
@@ -1124,10 +1098,9 @@ index 00000000..0e0013f1
 +    compatibleWith(COMPATIBILITY_YOUTUBE)
 +
 +    execute {
-+        // The button's click/visibility are handled entirely in the extension via
-+        // LegacyPlayerControlButton, so only the initialize + visibility hooks are needed.
++        // The button's click and visibility are handled entirely in the extension via
++        // LegacyPlayerControlButton, so only the initialize hook is needed.
 +        initializeTopControl(EXTENSION_BUTTON)
-+        injectVisibilityCheckCall(EXTENSION_BUTTON)
 +    }
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
