@@ -99,10 +99,27 @@ patch no longer applies cleanly):
    and `injectVisibilityCheckCall` disappeared from `LegacyPlayerControlsPatch` — `CatLockButton` and
    `CatLockPatch` had to be adapted.) When CI is red, read the job logs and diff the fork's usage against
    upstream's own equivalent code in the new tree (e.g. `ExternalDownloadButton`, `DownloadsPatch`).
-8. When CI is green: mark the auto-opened `dev → main` PR ready and **merge it (merge commit, never
-   squash)**. The Release workflow on `main` then publishes the new bundle automatically.
+   **Poll for the CI result — do not wait to be notified.** PR-activity webhooks deliver CI *failures*
+   reliably; a *passing* build often sends nothing. An agent session that opens the PR and ends its turn
+   expecting to be woken will therefore sleep through its own success and strand the sync. Stay in the
+   turn and poll the PR's check runs (a `sleep 30` loop is fine; the build takes ~3 min) until the check
+   reaches a terminal conclusion, then keep going in the same turn.
+8. When CI is green: merge the sync PR into `dev` if the fallback branch was used, wait for the
+   `Open a PR to main` workflow to auto-open the `dev → main` PR (it triggers on push to `dev`; poll for
+   it, it appears within a minute or two), mark it ready and **merge it (merge commit, never squash)**.
+   The Release workflow on `main` then publishes the new bundle automatically. **Confirm the release
+   actually published** — poll the repository's releases until the new `vX.Y.Z` tag appears — and name
+   that version in the final report. Note the release version is this fork's own semver (e.g. `v1.1.7`),
+   not the upstream version being synced.
 9. If the delta cannot be re-applied confidently or CI cannot be made green, STOP: leave the `dev → main`
    PR as draft with a comment explaining exactly what upstream changed and where the sync is stuck.
+
+**A run has exactly three valid endings**: the release published (name the version), upstream already
+synced (nothing to do), or an explicit blocked report per step 9. Ending a turn with an open, unmerged
+sync PR and no blocked report is a failure of the run even when every individual step succeeded — that
+is precisely what happened on 2026-08-09, when a routine session performed the whole v1.39.1 sync
+correctly, opened the PR, went idle 25 seconds later, and left a green build unmerged and unreleased
+until a human finished it by hand.
 
 ## Automation (routine) setup
 
