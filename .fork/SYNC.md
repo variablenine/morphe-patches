@@ -124,12 +124,12 @@ until a human finished it by hand.
 ## Automation (routine) setup
 
 The sync runs unattended as a claude.ai **Routine** ("Daily Morphe upstream sync", daily 09:00 UTC),
-which fires a fresh cloud session each time. The setting that matters lives on the *routine itself*
+which fires a fresh cloud session each time. The settings that matter live on the *routine itself*
 at [claude.ai/code/routines](https://claude.ai/code/routines) → edit routine — **not** on the cloud
 environment (the environment dialog only controls network access, env vars, and the setup script,
 and has no repository settings at all):
 
-1. **Repositories** — `variablenine/morphe-patches` must be attached. This is the one setting that
+1. **Repositories** — `variablenine/morphe-patches` must be attached. This is the setting that
    can strand a sync. It provides two separate things: git push credentials, *and* the GitHub MCP
    tools (`mcp__github__*`) that steps 7–8 need to read CI job logs, mark the `dev → main` PR ready
    and merge it — plain `git` cannot do those. A routine created through the CLI/MCP
@@ -137,6 +137,12 @@ and has no repository settings at all):
    afterwards. Note the fork is *public*, so `git clone`/`fetch` succeed even with no repo attached;
    only the push and the missing GitHub tools reveal the problem — and by then the sync is done and
    stuck just short of release.
+2. **Model** — this sync deserves the strongest available model: a stale delta patch has to be
+   re-applied by hand against refactored upstream APIs, which is the least mechanical part of the job.
+   `create_trigger` has **no model parameter** and does *not* inherit the creating session's model, so
+   an MCP-created routine silently runs on the platform default (Sonnet at the time of writing). The
+   model also cannot be changed through `update_trigger` — that call fails with `model_update_disabled`.
+   Set it in the routines UI; it is UI-only in both directions.
 
 **Ignore the "stores no MCP connectors" warning** that `create_trigger` prints. Connectors are the
 claude.ai integration mechanism (Gmail, Linear, …); GitHub access here is *not* one of them and there
