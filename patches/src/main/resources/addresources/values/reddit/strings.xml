@@ -63,6 +63,19 @@ Second \"item\" text"</string>
     <string name="morphe_remove_nsfw_dialog_title">Remove NSFW warning dialog</string>
     <string name="morphe_remove_nsfw_dialog_summary">Automatically accepts the NSFW content warning when visiting a subreddit</string>
 
+    <!-- Tenor GIF picker. -->
+    <string name="morphe_tenor_gif_picker_title">Use Tenor for GIFs</string>
+    <string name="morphe_tenor_gif_picker_summary">Replaces the built in Giphy picker with Tenor</string>
+    <string name="morphe_tenor_content_filter_title">GIF content filter</string>
+    <string name="morphe_tenor_content_filter_summary">How strictly Tenor filters results</string>
+    <string name="morphe_tenor_api_key_title">Tenor API key</string>
+    <string name="morphe_tenor_api_key_summary">Optional. Leave empty to use the key tenor.com publishes. Set your own Google Cloud Tenor key if results stop loading</string>
+    <string name="morphe_tenor_search_hint">Search Tenor</string>
+    <string name="morphe_tenor_close">Close</string>
+    <string name="morphe_tenor_powered_by">Powered by Tenor</string>
+    <string name="morphe_tenor_no_results">No GIFs found</string>
+    <string name="morphe_tenor_load_failed">Could not load GIFs. Check your connection and try again</string>
+
     <string name="morphe_screen_miscellaneous_title">Miscellaneous</string>
     <string name="morphe_about_title">About</string>
     <string name="morphe_about_summary">Patch version and official links</string>

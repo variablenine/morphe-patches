@@ -1,5 +1,5 @@
 diff --git a/.github/workflows/open_pull_request.yml b/.github/workflows/open_pull_request.yml
-index 2006f78c6..8cf51f879 100644
+index 2006f78..8cf51f8 100644
 --- a/.github/workflows/open_pull_request.yml
 +++ b/.github/workflows/open_pull_request.yml
 @@ -9,6 +9,10 @@ on:
@@ -14,7 +14,7 @@ index 2006f78c6..8cf51f879 100644
    pull-request:
      name: Open pull request
 diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
-index 39665ffa4..dd643b94b 100644
+index 39665ff..dd643b9 100644
 --- a/.github/workflows/release.yml
 +++ b/.github/workflows/release.yml
 @@ -20,6 +20,8 @@ jobs:
@@ -85,9 +85,1941 @@ index 39665ffa4..dd643b94b 100644
 +      # (and must not) have. They only ran on a published release, always failed
 +      # at the app-token step, and emailed the owner. Removed on purpose; keep them
 +      # out on every upstream sync (see .fork/SYNC.md).
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
+index 892166b..01d0bec 100644
+--- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
+@@ -45,6 +45,18 @@ public class Settings extends BaseSettings {
+     public static final BooleanSetting REMOVE_NOTIFICATION_DIALOG = new BooleanSetting("morphe_remove_notification_dialog", FALSE, true);
+     public static final BooleanSetting SHOW_VIEW_COUNT = new BooleanSetting("morphe_show_view_count", FALSE, true);
+ 
++    // Tenor GIF picker
++    public static final BooleanSetting TENOR_GIF_PICKER = new BooleanSetting("morphe_tenor_gif_picker", FALSE, true);
++    /**
++     * Passed to Tenor as {@code contentfilter}. One of off, low, medium or high.
++     */
++    public static final StringSetting TENOR_CONTENT_FILTER = new StringSetting("morphe_tenor_content_filter", "medium");
++    /**
++     * Optional user supplied Tenor v2 key. When empty the picker uses the key
++     * tenor.com publishes for its own web client.
++     */
++    public static final StringSetting TENOR_API_KEY = new StringSetting("morphe_tenor_api_key", "");
++
+     // Miscellaneous
+     public static final BooleanSetting OPEN_LINKS_DIRECTLY = new BooleanSetting("morphe_open_links_directly", TRUE);
+     public static final BooleanSetting OPEN_LINKS_EXTERNALLY = new BooleanSetting("morphe_open_links_externally", TRUE);
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/GifImageLoader.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/GifImageLoader.java
+new file mode 100644
+index 0000000..5ec0ae0
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/GifImageLoader.java
+@@ -0,0 +1,207 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++import android.graphics.ImageDecoder;
++import android.graphics.drawable.AnimatedImageDrawable;
++import android.graphics.drawable.Drawable;
++import android.widget.ImageView;
++
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.nio.ByteBuffer;
++import java.util.Collections;
++import java.util.Map;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.ThreadFactory;
++
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.Utils;
++import app.morphe.extension.shared.requests.Requester;
++
++/**
++ * Downloads and displays animated GIFs in the picker grid.
++ *
++ * <p>Encoded bytes are cached rather than decoded drawables: an
++ * {@link AnimatedImageDrawable} holds animation state and cannot be attached to
++ * more than one view, so a shared instance would stall whenever the same GIF
++ * appeared twice. Re-decoding from cached bytes costs little and keeps each cell
++ * independent.
++ *
++ * <p>Loads are tagged with their url and checked again before display, so a view
++ * that has been rebound to a different GIF while its download was in flight is
++ * not overwritten with the stale one.
++ */
++public final class GifImageLoader {
++
++    private static final int CONNECT_TIMEOUT_MILLISECONDS = 10_000;
++    private static final int READ_TIMEOUT_MILLISECONDS = 20_000;
++
++    /** Grid previews are tens of kilobytes; anything far larger is not a preview. */
++    private static final int MAXIMUM_PREVIEW_BYTES = 8 * 1024 * 1024;
++
++    /** Roughly two screens of previews, so scrolling back up does not re-download. */
++    private static final int CACHE_ENTRIES = 120;
++
++    private static final Map<String, byte[]> CACHE =
++            Collections.synchronizedMap(Utils.createSizeRestrictedMap(CACHE_ENTRIES));
++
++    /**
++     * Several downloads run at once so the grid fills in roughly in view order,
++     * but not so many that they compete with the search request.
++     */
++    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(4, new ThreadFactory() {
++        @Override
++        public Thread newThread(Runnable runnable) {
++            Thread thread = new Thread(runnable, "morphe-tenor-image");
++            thread.setDaemon(true);
++            // Below default so decoding never competes with the UI thread.
++            thread.setPriority(Thread.MIN_PRIORITY + 2);
++            return thread;
++        }
++    });
++
++    private GifImageLoader() {
++    }
++
++    /**
++     * Loads {@code url} into {@code view}, animating it once decoded.
++     *
++     * <p>Safe to call repeatedly on a recycled view: the most recent call wins.
++     */
++    public static void load(ImageView view, String url) {
++        if (url == null || url.isEmpty()) return;
++
++        // The single argument tag is used rather than a keyed one: keyed tags must be
++        // application resource ids, and the extension has no resources of its own.
++        // These views are created here and read by nothing else.
++        view.setTag(url);
++
++        byte[] cached = CACHE.get(url);
++        if (cached != null) {
++            display(view, url, cached);
++            return;
++        }
++
++        EXECUTOR.execute(() -> {
++            try {
++                // No staleness check here: touching the view off the main thread is
++                // what display() exists to avoid, and a download that turns out to be
++                // unwanted still populates the cache for when it scrolls back in.
++                byte[] bytes = fetch(url, MAXIMUM_PREVIEW_BYTES);
++                CACHE.put(url, bytes);
++                Utils.runOnMainThread(() -> display(view, url, bytes));
++            } catch (IOException ex) {
++                // A single failed preview is not worth an error dialog; the cell
++                // simply stays blank.
++                Logger.printDebug(() -> "Could not load Tenor preview: " + url + " " + ex.getMessage());
++            } catch (Exception ex) {
++                Logger.printException(() -> "Tenor preview load failure", ex);
++            }
++        });
++    }
++
++    /** Decodes and attaches, on the main thread, if the view still wants this url. */
++    private static void display(ImageView view, String url, byte[] bytes) {
++        try {
++            // The view may have been rebound to another GIF while this was in flight.
++            if (!url.equals(view.getTag())) return;
++
++            Drawable drawable = decode(bytes);
++            view.setImageDrawable(drawable);
++
++            if (drawable instanceof AnimatedImageDrawable animated) {
++                animated.setRepeatCount(AnimatedImageDrawable.REPEAT_INFINITE);
++                animated.start();
++            }
++        } catch (Exception ex) {
++            Logger.printDebug(() -> "Could not decode Tenor preview: " + url + " " + ex.getMessage());
++        }
++    }
++
++    /**
++     * Decodes GIF bytes into a drawable.
++     *
++     * <p>{@link ImageDecoder} produces an {@link AnimatedImageDrawable} for animated
++     * sources and a plain bitmap drawable for static ones, so both are handled without
++     * having to sniff the content first.
++     */
++    private static Drawable decode(byte[] bytes) throws IOException {
++        return ImageDecoder.decodeDrawable(
++                ImageDecoder.createSource(ByteBuffer.wrap(bytes)),
++                (decoder, info, source) -> {
++                    // Software allocation: hardware bitmaps cannot be drawn into the
++                    // dialog's software layers on every device.
++                    decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
++                });
++    }
++
++    /**
++     * Downloads a url in full.
++     *
++     * <p>Blocking, and used both for grid previews and for fetching the full size
++     * GIF that gets uploaded once one is picked.
++     *
++     * @param maximumBytes Refuse responses larger than this.
++     */
++    public static byte[] fetch(String url, int maximumBytes) throws IOException {
++        Utils.verifyOffMainThread();
++
++        byte[] cached = CACHE.get(url);
++        if (cached != null) return cached;
++
++        HttpURLConnection connection = null;
++        try {
++            connection = Requester.openConnection(url);
++            connection.setRequestMethod("GET");
++            connection.setConnectTimeout(CONNECT_TIMEOUT_MILLISECONDS);
++            connection.setReadTimeout(READ_TIMEOUT_MILLISECONDS);
++
++            final int responseCode = connection.getResponseCode();
++            if (responseCode != HttpURLConnection.HTTP_OK) {
++                throw new IOException("HTTP " + responseCode + " fetching " + url);
++            }
++
++            // Reject on the declared length when there is one, so an oversized
++            // download is refused before any of it is read.
++            final int contentLength = connection.getContentLength();
++            if (contentLength > maximumBytes) {
++                throw new IOException("Response of " + contentLength + " bytes exceeds " + maximumBytes);
++            }
++
++            try (InputStream stream = connection.getInputStream()) {
++                return readAll(stream, maximumBytes);
++            }
++        } finally {
++            if (connection != null) connection.disconnect();
++        }
++    }
++
++    private static byte[] readAll(InputStream stream, int maximumBytes) throws IOException {
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        byte[] chunk = new byte[16384];
++        int read;
++
++        while ((read = stream.read(chunk)) != -1) {
++            if (buffer.size() + read > maximumBytes) {
++                throw new IOException("Response exceeded " + maximumBytes + " bytes");
++            }
++            buffer.write(chunk, 0, read);
++        }
++
++        return buffer.toByteArray();
++    }
++
++    /** Drops every cached preview. Called when the picker closes. */
++    public static void clearCache() {
++        CACHE.clear();
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/MasonryColumns.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/MasonryColumns.java
+new file mode 100644
+index 0000000..2a06a11
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/MasonryColumns.java
+@@ -0,0 +1,80 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++/**
++ * Tracks column heights for the staggered grid the picker lays GIFs out in.
++ *
++ * <p>GIFs have wildly different aspect ratios, so a fixed grid either crops them
++ * or leaves large gaps. Placing each new GIF into whichever column is currently
++ * shortest keeps the columns close to level as the user scrolls.
++ *
++ * <p>Placement is incremental rather than computed over the whole result set:
++ * pages arrive one at a time and already placed items must never move, since
++ * reflowing the grid under the user's thumb is how mis-taps happen.
++ *
++ * <p>Pure by design - no Android imports - so the layout maths is testable with
++ * a plain JDK.
++ */
++public final class MasonryColumns {
++
++    private final int[] heights;
++
++    /**
++     * @param columnCount Number of columns, at least one.
++     */
++    public MasonryColumns(int columnCount) {
++        if (columnCount < 1) {
++            throw new IllegalArgumentException("columnCount: " + columnCount);
++        }
++        heights = new int[columnCount];
++    }
++
++    public int columnCount() {
++        return heights.length;
++    }
++
++    /** Current accumulated height of a column. */
++    public int height(int column) {
++        return heights[column];
++    }
++
++    /**
++     * Index of the shortest column, preferring the leftmost when tied.
++     *
++     * <p>The tie break matters for the first row: without it an empty grid would
++     * place every item in whichever column the scan happened to reach last, and
++     * the first row would come out ragged.
++     */
++    public int shortestColumn() {
++        int shortest = 0;
++        for (int i = 1; i < heights.length; i++) {
++            if (heights[i] < heights[shortest]) {
++                shortest = i;
++            }
++        }
++        return shortest;
++    }
++
++    /**
++     * Assigns an item to the shortest column and accounts for its height.
++     *
++     * @param itemHeight Height the item will occupy, including any spacing below it.
++     * @return Index of the column the item belongs in.
++     */
++    public int place(int itemHeight) {
++        int column = shortestColumn();
++        heights[column] += Math.max(0, itemHeight);
++        return column;
++    }
++
++    /** Clears all column heights, for when the grid is emptied to show new results. */
++    public void reset() {
++        java.util.Arrays.fill(heights, 0);
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorApiClient.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorApiClient.java
+new file mode 100644
+index 0000000..f3483c6
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorApiClient.java
+@@ -0,0 +1,391 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++import org.json.JSONArray;
++import org.json.JSONObject;
++
++import java.io.ByteArrayOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.net.HttpURLConnection;
++import java.nio.charset.StandardCharsets;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++
++import app.morphe.extension.reddit.settings.Settings;
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.Utils;
++import app.morphe.extension.shared.requests.Requester;
++
++/**
++ * Talks to the Tenor v2 API.
++ *
++ * <p>Every method here blocks and must be called off the main thread.
++ *
++ * <p>The key is bootstrapped from tenor.com (see {@link TenorWebConfig}) unless the
++ * user supplied their own in settings. Because a scraped key can be rotated out from
++ * under us at any time, an authentication failure discards the cached config and
++ * retries once with a freshly fetched one; only if that also fails does the call
++ * report an error.
++ */
++public final class TenorApiClient {
++
++    private static final int CONNECT_TIMEOUT_MILLISECONDS = 10_000;
++    private static final int READ_TIMEOUT_MILLISECONDS = 15_000;
++
++    /**
++     * Responses are small (a page of metadata), but a hostile or broken response
++     * should not be allowed to exhaust memory.
++     */
++    private static final int MAXIMUM_RESPONSE_BYTES = 4 * 1024 * 1024;
++
++    /**
++     * tenor.com serves its configuration only to what looks like a browser.
++     * The API calls themselves do not care.
++     */
++    private static final String BROWSER_USER_AGENT =
++            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) "
++                    + "Chrome/120.0.0.0 Mobile Safari/537.36";
++
++    /**
++     * Cached for the life of the process. Not persisted: a stale key stored across
++     * launches would fail the first search of every session, and re-fetching costs
++     * one request the first time the picker is opened.
++     */
++    private static volatile TenorWebConfig cachedConfig;
++
++    private TenorApiClient() {
++    }
++
++    /** A page of results together with the cursor that fetches the next one. */
++    public static final class TenorPage {
++        public final List<TenorGif> results;
++
++        /** Cursor for the following page, or empty when the results are exhausted. */
++        public final String next;
++
++        TenorPage(List<TenorGif> results, String next) {
++            this.results = results;
++            this.next = next;
++        }
++
++        public boolean hasMore() {
++            return next != null && !next.isEmpty();
++        }
++
++        static TenorPage empty() {
++            return new TenorPage(Collections.emptyList(), "");
++        }
++    }
++
++    /** Raised for any failure that should be surfaced to the user as "could not load". */
++    public static final class TenorException extends Exception {
++        TenorException(String message) {
++            super(message);
++        }
++
++        TenorException(String message, Throwable cause) {
++            super(message, cause);
++        }
++    }
++
++    // region Configuration
++
++    /**
++     * Discards the cached credentials so the next call re-fetches them.
++     * Called when Tenor rejects the key we hold.
++     */
++    public static void invalidateConfig() {
++        cachedConfig = null;
++    }
++
++    /**
++     * The credentials to use, fetching them if they are not already cached.
++     *
++     * <p>A key entered in settings wins outright and is never re-fetched, so a user
++     * with their own Google Cloud key never touches tenor.com at all.
++     */
++    private static TenorWebConfig config() throws TenorException {
++        String userKey = Settings.TENOR_API_KEY.get().trim();
++        if (!userKey.isEmpty()) {
++            return new TenorWebConfig(null, userKey, null);
++        }
++
++        TenorWebConfig config = cachedConfig;
++        if (config != null && config.isUsable()) {
++            return config;
++        }
++
++        config = fetchWebConfig();
++        cachedConfig = config;
++        return config;
++    }
++
++    /** Scrapes tenor.com for the key its own web client uses. */
++    private static TenorWebConfig fetchWebConfig() throws TenorException {
++        String html = get(TenorWebConfig.CONFIG_SOURCE_URL, BROWSER_USER_AGENT);
++
++        String payload = TenorWebConfig.extractEncodedPayload(html);
++        if (payload == null) {
++            throw new TenorException("tenor.com served no configuration block");
++        }
++
++        String json = TenorWebConfig.decodePayload(payload);
++        if (json == null) {
++            throw new TenorException("tenor.com configuration block is not valid base64");
++        }
++
++        try {
++            JSONObject object = new JSONObject(json);
++            TenorWebConfig config = new TenorWebConfig(
++                    object.optString(TenorWebConfig.FIELD_API_URL, null),
++                    object.optString(TenorWebConfig.FIELD_API_KEY, null),
++                    object.optString(TenorWebConfig.FIELD_CLIENT_KEY, null));
++
++            if (!config.isUsable()) {
++                throw new TenorException("tenor.com configuration carries no api key");
++            }
++
++            Logger.printDebug(() -> "Fetched Tenor configuration: " + config);
++            return config;
++        } catch (org.json.JSONException ex) {
++            throw new TenorException("tenor.com configuration is not valid json", ex);
++        }
++    }
++
++    private static String contentFilter() {
++        return Settings.TENOR_CONTENT_FILTER.get();
++    }
++
++    // endregion
++
++    // region Endpoints
++
++    /** The default feed, shown before the user has typed a query. */
++    public static TenorPage featured(String position) throws TenorException {
++        return gifPage(config -> TenorRequestBuilder.featured(config, contentFilter(), position));
++    }
++
++    /** GIFs matching a query. */
++    public static TenorPage search(String query, String position) throws TenorException {
++        if (query == null || query.trim().isEmpty()) {
++            return featured(position);
++        }
++        return gifPage(config -> TenorRequestBuilder.search(config, query, contentFilter(), position));
++    }
++
++    /** Category tiles for the landing state of the picker. */
++    public static List<TenorCategory> categories() throws TenorException {
++        String body = getWithRetry(config -> TenorRequestBuilder.categories(config, contentFilter()));
++
++        try {
++            JSONArray tags = new JSONObject(body).optJSONArray("tags");
++            if (tags == null) return Collections.emptyList();
++
++            List<TenorCategory> categories = new ArrayList<>(tags.length());
++            for (int i = 0; i < tags.length(); i++) {
++                JSONObject tag = tags.optJSONObject(i);
++                if (tag == null) continue;
++
++                String searchTerm = tag.optString("searchterm", "");
++                if (searchTerm.isEmpty()) continue;
++
++                categories.add(new TenorCategory(
++                        tag.optString("name", searchTerm),
++                        searchTerm,
++                        tag.optString("image", "")));
++            }
++            return categories;
++        } catch (org.json.JSONException ex) {
++            throw new TenorException("Malformed categories response", ex);
++        }
++    }
++
++    /** Type ahead completions for a partially typed query. */
++    public static List<String> autocomplete(String query) throws TenorException {
++        if (query == null || query.trim().isEmpty()) {
++            return Collections.emptyList();
++        }
++
++        String body = getWithRetry(config -> TenorRequestBuilder.autocomplete(config, query, contentFilter()));
++
++        try {
++            JSONArray results = new JSONObject(body).optJSONArray("results");
++            if (results == null) return Collections.emptyList();
++
++            List<String> suggestions = new ArrayList<>(results.length());
++            for (int i = 0; i < results.length(); i++) {
++                String suggestion = results.optString(i, "");
++                if (!suggestion.isEmpty()) suggestions.add(suggestion);
++            }
++            return suggestions;
++        } catch (org.json.JSONException ex) {
++            throw new TenorException("Malformed autocomplete response", ex);
++        }
++    }
++
++    // endregion
++
++    // region Plumbing
++
++    /** Builds a request url from the credentials in force at call time. */
++    private interface UrlFactory {
++        String create(TenorWebConfig config);
++    }
++
++    private static TenorPage gifPage(UrlFactory factory) throws TenorException {
++        String body = getWithRetry(factory);
++
++        try {
++            JSONObject object = new JSONObject(body);
++            JSONArray results = object.optJSONArray("results");
++            if (results == null) return TenorPage.empty();
++
++            List<TenorGif> gifs = new ArrayList<>(results.length());
++            for (int i = 0; i < results.length(); i++) {
++                TenorGif gif = parseGif(results.optJSONObject(i));
++                if (gif != null) gifs.add(gif);
++            }
++
++            return new TenorPage(gifs, object.optString("next", ""));
++        } catch (org.json.JSONException ex) {
++            throw new TenorException("Malformed search response", ex);
++        }
++    }
++
++    /**
++     * Converts one result object.
++     *
++     * @return The GIF, or null if it carries neither rendition the picker needs,
++     * in which case it is skipped rather than failing the whole page.
++     */
++    private static TenorGif parseGif(JSONObject result) {
++        if (result == null) return null;
++
++        JSONObject formats = result.optJSONObject("media_formats");
++        if (formats == null) return null;
++
++        JSONObject preview = formats.optJSONObject("tinygif");
++        JSONObject full = formats.optJSONObject("gif");
++
++        // Either rendition can stand in for the other: a missing preview is only a
++        // heavier grid cell, and a missing full size only a lower quality upload.
++        if (preview == null) preview = full;
++        if (full == null) full = preview;
++        if (preview == null) return null;
++
++        String previewUrl = preview.optString("url", "");
++        String fullUrl = full.optString("url", "");
++        if (previewUrl.isEmpty() || fullUrl.isEmpty()) return null;
++
++        int[] previewDimensions = dimensions(preview);
++        int[] fullDimensions = dimensions(full);
++
++        return new TenorGif(
++                result.optString("id", ""),
++                result.optString("content_description", ""),
++                previewUrl, previewDimensions[0], previewDimensions[1],
++                fullUrl, fullDimensions[0], fullDimensions[1],
++                full.optInt("size", 0),
++                result.optString("itemurl", ""));
++    }
++
++    /** Reads the {@code dims} pair, defaulting to zero so callers fall back to a square cell. */
++    private static int[] dimensions(JSONObject format) {
++        JSONArray dims = format.optJSONArray("dims");
++        if (dims == null || dims.length() < 2) return new int[]{0, 0};
++        return new int[]{dims.optInt(0, 0), dims.optInt(1, 0)};
++    }
++
++    /**
++     * Issues a request, and on an authentication failure re-fetches the credentials
++     * and tries once more.
++     *
++     * <p>The retry is what keeps the picker working when tenor.com rotates the key
++     * its web client uses. It is deliberately not attempted for a user supplied key,
++     * which re-fetching cannot repair.
++     */
++    private static String getWithRetry(UrlFactory factory) throws TenorException {
++        TenorWebConfig config = config();
++
++        try {
++            return get(factory.create(config), null);
++        } catch (TenorException ex) {
++            boolean usingUserKey = !Settings.TENOR_API_KEY.get().trim().isEmpty();
++            if (usingUserKey || !isAuthenticationFailure(ex)) {
++                throw ex;
++            }
++
++            Logger.printDebug(() -> "Tenor rejected the cached key, refreshing it");
++            invalidateConfig();
++            return get(factory.create(config()), null);
++        }
++    }
++
++    /**
++     * Whether a failure looks like a rejected key rather than a network problem.
++     * Tenor answers an invalid key with 400 and a revoked one with 403.
++     */
++    private static boolean isAuthenticationFailure(TenorException ex) {
++        String message = ex.getMessage();
++        return message != null && (message.contains("HTTP 400") || message.contains("HTTP 403"));
++    }
++
++    /**
++     * Performs a GET and returns the body as text.
++     *
++     * @param userAgent User agent to send, or null to leave the default in place.
++     */
++    private static String get(String url, String userAgent) throws TenorException {
++        Utils.verifyOffMainThread();
++
++        HttpURLConnection connection = null;
++        try {
++            connection = Requester.openConnection(url);
++            connection.setRequestMethod("GET");
++            connection.setConnectTimeout(CONNECT_TIMEOUT_MILLISECONDS);
++            connection.setReadTimeout(READ_TIMEOUT_MILLISECONDS);
++            connection.setRequestProperty("Accept", "application/json");
++            if (userAgent != null) {
++                connection.setRequestProperty("User-Agent", userAgent);
++            }
++
++            final int responseCode = connection.getResponseCode();
++            if (responseCode != HttpURLConnection.HTTP_OK) {
++                throw new TenorException("HTTP " + responseCode + " from Tenor");
++            }
++
++            try (InputStream stream = connection.getInputStream()) {
++                return readAll(stream);
++            }
++        } catch (IOException ex) {
++            throw new TenorException("Could not reach Tenor", ex);
++        } finally {
++            if (connection != null) connection.disconnect();
++        }
++    }
++
++    private static String readAll(InputStream stream) throws IOException {
++        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
++        byte[] chunk = new byte[8192];
++        int read;
++
++        while ((read = stream.read(chunk)) != -1) {
++            if (buffer.size() + read > MAXIMUM_RESPONSE_BYTES) {
++                throw new IOException("Tenor response exceeded " + MAXIMUM_RESPONSE_BYTES + " bytes");
++            }
++            buffer.write(chunk, 0, read);
++        }
++
++        return buffer.toString(StandardCharsets.UTF_8.name());
++    }
++
++    // endregion
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorCategory.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorCategory.java
+new file mode 100644
+index 0000000..35941bd
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorCategory.java
+@@ -0,0 +1,37 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++/**
++ * A category tile shown before the user searches for anything.
++ *
++ * <p>Tenor labels these with a leading hash ("#shrug") while the term that must
++ * be searched for is the bare word, so the two are kept separate.
++ */
++public final class TenorCategory {
++
++    /** Display label, as Tenor formats it. */
++    public final String name;
++
++    /** Query to run when the tile is tapped. */
++    public final String searchTerm;
++
++    /** Animated preview shown behind the label. */
++    public final String imageUrl;
++
++    public TenorCategory(String name, String searchTerm, String imageUrl) {
++        this.name = name;
++        this.searchTerm = searchTerm;
++        this.imageUrl = imageUrl;
++    }
++
++    @Override
++    public String toString() {
++        return "TenorCategory{" + searchTerm + "}";
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorGif.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorGif.java
+new file mode 100644
+index 0000000..4bcf2f3
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorGif.java
+@@ -0,0 +1,84 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++/**
++ * A single Tenor result.
++ *
++ * <p>Deliberately free of Android imports so the pure logic around it can be
++ * exercised with a plain JDK (see {@code TenorSelfTest}).
++ *
++ * <p>Two renditions are carried: a small one for the picker grid, and the full
++ * size one that is actually sent to Reddit once picked. Sending the preview
++ * would upload a visibly degraded GIF, so the two must not be conflated.
++ */
++public final class TenorGif {
++
++    /** Tenor post id. Stable, and what {@code itemUrl} is built from. */
++    public final String id;
++
++    /** Human readable description, used as the content description of the grid cell. */
++    public final String description;
++
++    /** Small rendition shown in the picker grid. */
++    public final String previewUrl;
++    public final int previewWidth;
++    public final int previewHeight;
++
++    /** Full size rendition uploaded to Reddit when this GIF is picked. */
++    public final String fullUrl;
++    public final int fullWidth;
++    public final int fullHeight;
++
++    /**
++     * Size of {@link #fullUrl} in bytes as reported by Tenor, or zero if unknown.
++     * Checked before uploading so an oversized GIF fails fast with a clear message
++     * rather than part way through the upload.
++     */
++    public final int fullByteSize;
++
++    /** Canonical tenor.com page for this GIF, used as the link fallback. */
++    public final String itemUrl;
++
++    public TenorGif(String id, String description,
++                    String previewUrl, int previewWidth, int previewHeight,
++                    String fullUrl, int fullWidth, int fullHeight, int fullByteSize,
++                    String itemUrl) {
++        this.id = id;
++        this.description = description;
++        this.previewUrl = previewUrl;
++        this.previewWidth = previewWidth;
++        this.previewHeight = previewHeight;
++        this.fullUrl = fullUrl;
++        this.fullWidth = fullWidth;
++        this.fullHeight = fullHeight;
++        this.fullByteSize = fullByteSize;
++        this.itemUrl = itemUrl;
++    }
++
++    /**
++     * Height this GIF should occupy when drawn at {@code columnWidth}, preserving aspect ratio.
++     *
++     * @return Scaled height in the same units as {@code columnWidth}, never less than 1.
++     */
++    public int scaledHeight(int columnWidth) {
++        if (previewWidth <= 0 || previewHeight <= 0) {
++            // Tenor omitted the dimensions. Fall back to a square so the cell is
++            // still tappable and the column heights stay roughly balanced.
++            return columnWidth;
++        }
++
++        long scaled = (long) columnWidth * previewHeight / previewWidth;
++        return (int) Math.max(1, Math.min(Integer.MAX_VALUE, scaled));
++    }
++
++    @Override
++    public String toString() {
++        return "TenorGif{" + id + " " + previewWidth + "x" + previewHeight + "}";
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorGifPickerDialog.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorGifPickerDialog.java
+new file mode 100644
+index 0000000..b2ad5e6
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorGifPickerDialog.java
+@@ -0,0 +1,602 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++import static app.morphe.extension.shared.StringRef.str;
++
++import android.app.Activity;
++import android.app.Dialog;
++import android.app.DialogFragment;
++import android.graphics.Color;
++import android.graphics.drawable.GradientDrawable;
++import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
++import android.text.Editable;
++import android.text.TextWatcher;
++import android.util.TypedValue;
++import android.view.Gravity;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.view.Window;
++import android.view.inputmethod.EditorInfo;
++import android.widget.EditText;
++import android.widget.FrameLayout;
++import android.widget.HorizontalScrollView;
++import android.widget.ImageView;
++import android.widget.LinearLayout;
++import android.widget.ProgressBar;
++import android.widget.ScrollView;
++import android.widget.TextView;
++
++import java.util.List;
++
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.Utils;
++
++/**
++ * The Tenor GIF picker.
++ *
++ * <p>Laid out in code rather than XML: the extension has no resources of its own,
++ * and building the views directly is how the settings screen already does it.
++ *
++ * <p>Structure, following the shape Discord's picker settled on: a search field
++ * pinned to the top, type ahead suggestions beneath it, and a staggered two column
++ * grid of animating GIFs that pages in as it is scrolled. With no query entered it
++ * shows Tenor's featured feed behind a row of category tiles.
++ */
++@SuppressWarnings("deprecation")
++public final class TenorGifPickerDialog extends DialogFragment {
++
++    /** Notified once, with the GIF the user chose. */
++    public interface Listener {
++        void onGifPicked(TenorGif gif);
++    }
++
++    /** Wait after the last keystroke before searching, so typing does not issue a request per letter. */
++    private static final int SEARCH_DEBOUNCE_MILLISECONDS = 350;
++
++    /** Start loading the next page once the scroll is within this many screens of the end. */
++    private static final float PREFETCH_SCREENS = 1.5f;
++
++    private static final int COLUMN_SPACING_DP = 8;
++    private static final int WIDE_LAYOUT_MINIMUM_DP = 600;
++
++    private final Handler handler = new Handler(Looper.getMainLooper());
++
++    private Listener listener;
++
++    // Views retained for state changes.
++    private EditText searchField;
++    private LinearLayout suggestionRow;
++    private HorizontalScrollView suggestionScroll;
++    private ScrollView contentScroll;
++    private LinearLayout columnContainer;
++    private LinearLayout[] columns;
++    private ProgressBar progressBar;
++    private TextView statusText;
++
++    private MasonryColumns masonry;
++    private int columnWidth;
++
++    /** Query currently displayed. Empty means the featured feed. */
++    private String query = "";
++
++    /** Cursor for the next page, empty when exhausted. */
++    private String nextCursor = "";
++
++    private boolean loading;
++    private boolean exhausted;
++
++    /**
++     * Incremented whenever the displayed query changes. Responses carrying a stale
++     * token are discarded, so a slow first search cannot land on top of a later one.
++     */
++    private int requestToken;
++
++    private int backgroundColor;
++    private int foregroundColor;
++    private int surfaceColor;
++
++    /**
++     * Opens the picker.
++     *
++     * @param listener Notified with the chosen GIF. Not called if the picker is dismissed.
++     */
++    public static void show(Activity activity, Listener listener) {
++        try {
++            TenorGifPickerDialog dialog = new TenorGifPickerDialog();
++            dialog.listener = listener;
++            dialog.show(activity.getFragmentManager(), "morphe_tenor_picker");
++        } catch (Exception ex) {
++            Logger.printException(() -> "Could not open the Tenor picker", ex);
++        }
++    }
++
++    @Override
++    public void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        setStyle(STYLE_NO_TITLE, android.R.style.Theme_DeviceDefault_NoActionBar);
++    }
++
++    @Override
++    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
++        Activity activity = getActivity();
++
++        backgroundColor = Utils.getAppBackgroundColor();
++        foregroundColor = Utils.getAppForegroundColor();
++        surfaceColor = blend(backgroundColor, foregroundColor, 0.10f);
++
++        Dialog dialog = getDialog();
++        if (dialog != null) {
++            Window window = dialog.getWindow();
++            if (window != null) {
++                window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
++                window.setStatusBarColor(backgroundColor);
++            }
++        }
++
++        LinearLayout root = new LinearLayout(activity);
++        root.setOrientation(LinearLayout.VERTICAL);
++        root.setBackgroundColor(backgroundColor);
++        root.setFitsSystemWindows(true);
++        root.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
++
++        root.addView(createHeader(activity));
++        root.addView(createSuggestionRow(activity));
++        root.addView(createContent(activity), new LinearLayout.LayoutParams(-1, 0, 1f));
++        root.addView(createFooter(activity));
++
++        // The grid is sized from the window width, which is match parent here.
++        int totalWidth = getResources().getDisplayMetrics().widthPixels;
++        int columnCount = totalWidth >= dp(WIDE_LAYOUT_MINIMUM_DP) ? 3 : 2;
++        int spacing = dp(COLUMN_SPACING_DP);
++        columnWidth = (totalWidth - spacing * (columnCount + 1)) / columnCount;
++
++        buildColumns(activity, columnCount, spacing);
++
++        loadFirstPage();
++        return root;
++    }
++
++    @Override
++    public void onDestroyView() {
++        super.onDestroyView();
++        handler.removeCallbacksAndMessages(null);
++        // Previews are only useful while the picker is open, and they are the
++        // largest thing this feature holds in memory.
++        GifImageLoader.clearCache();
++    }
++
++    // region Layout
++
++    private View createHeader(Activity activity) {
++        LinearLayout header = new LinearLayout(activity);
++        header.setOrientation(LinearLayout.HORIZONTAL);
++        header.setGravity(Gravity.CENTER_VERTICAL);
++        header.setPadding(dp(12), dp(10), dp(12), dp(8));
++
++        searchField = new EditText(activity);
++        searchField.setHint(str("morphe_tenor_search_hint"));
++        searchField.setHintTextColor(blend(backgroundColor, foregroundColor, 0.45f));
++        searchField.setTextColor(foregroundColor);
++        searchField.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
++        searchField.setSingleLine(true);
++        searchField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
++        searchField.setBackground(roundedRectangle(surfaceColor, dp(20)));
++        searchField.setPadding(dp(16), dp(10), dp(16), dp(10));
++        searchField.addTextChangedListener(new TextWatcher() {
++            @Override
++            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
++            }
++
++            @Override
++            public void onTextChanged(CharSequence s, int start, int before, int count) {
++            }
++
++            @Override
++            public void afterTextChanged(Editable editable) {
++                scheduleSearch(editable.toString());
++            }
++        });
++        header.addView(searchField, new LinearLayout.LayoutParams(0, -2, 1f));
++
++        TextView close = new TextView(activity);
++        close.setText("✕");
++        close.setTextColor(foregroundColor);
++        close.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
++        close.setGravity(Gravity.CENTER);
++        close.setPadding(dp(14), dp(6), dp(4), dp(6));
++        close.setContentDescription(str("morphe_tenor_close"));
++        close.setOnClickListener(view -> dismiss());
++        header.addView(close);
++
++        return header;
++    }
++
++    private View createSuggestionRow(Activity activity) {
++        suggestionScroll = new HorizontalScrollView(activity);
++        suggestionScroll.setHorizontalScrollBarEnabled(false);
++        suggestionScroll.setVisibility(View.GONE);
++        suggestionScroll.setPadding(dp(12), 0, dp(12), dp(4));
++
++        suggestionRow = new LinearLayout(activity);
++        suggestionRow.setOrientation(LinearLayout.HORIZONTAL);
++        suggestionScroll.addView(suggestionRow, new FrameLayout.LayoutParams(-2, -2));
++
++        return suggestionScroll;
++    }
++
++    private View createContent(Activity activity) {
++        FrameLayout frame = new FrameLayout(activity);
++
++        contentScroll = new ScrollView(activity);
++        contentScroll.setFillViewport(true);
++        contentScroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> maybeLoadNextPage());
++
++        columnContainer = new LinearLayout(activity);
++        columnContainer.setOrientation(LinearLayout.HORIZONTAL);
++        contentScroll.addView(columnContainer, new FrameLayout.LayoutParams(-1, -2));
++        frame.addView(contentScroll, new FrameLayout.LayoutParams(-1, -1));
++
++        progressBar = new ProgressBar(activity);
++        progressBar.setVisibility(View.GONE);
++        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(-2, -2);
++        progressParams.gravity = Gravity.CENTER;
++        frame.addView(progressBar, progressParams);
++
++        statusText = new TextView(activity);
++        statusText.setTextColor(blend(backgroundColor, foregroundColor, 0.6f));
++        statusText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
++        statusText.setGravity(Gravity.CENTER);
++        statusText.setPadding(dp(24), dp(24), dp(24), dp(24));
++        statusText.setVisibility(View.GONE);
++        FrameLayout.LayoutParams statusParams = new FrameLayout.LayoutParams(-1, -2);
++        statusParams.gravity = Gravity.CENTER;
++        frame.addView(statusText, statusParams);
++
++        return frame;
++    }
++
++    /**
++     * Tenor's terms require visible attribution wherever its results are shown.
++     */
++    private View createFooter(Activity activity) {
++        TextView footer = new TextView(activity);
++        footer.setText(str("morphe_tenor_powered_by"));
++        footer.setTextColor(blend(backgroundColor, foregroundColor, 0.45f));
++        footer.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
++        footer.setGravity(Gravity.CENTER);
++        footer.setPadding(dp(8), dp(6), dp(8), dp(8));
++        return footer;
++    }
++
++    private void buildColumns(Activity activity, int columnCount, int spacing) {
++        columns = new LinearLayout[columnCount];
++        masonry = new MasonryColumns(columnCount);
++
++        columnContainer.setPadding(spacing, 0, spacing, spacing);
++        for (int i = 0; i < columnCount; i++) {
++            LinearLayout column = new LinearLayout(activity);
++            column.setOrientation(LinearLayout.VERTICAL);
++
++            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(columnWidth, -2);
++            if (i > 0) params.leftMargin = spacing;
++            columnContainer.addView(column, params);
++
++            columns[i] = column;
++        }
++    }
++
++    // endregion
++
++    // region Loading
++
++    /** Restarts the grid for the current {@link #query}. */
++    private void loadFirstPage() {
++        final int token = ++requestToken;
++
++        nextCursor = "";
++        exhausted = false;
++        loading = true;
++
++        clearGrid();
++        setStatus(null);
++        progressBar.setVisibility(View.VISIBLE);
++
++        final String requestedQuery = query;
++        Utils.runOnBackgroundThread(() -> {
++            try {
++                // Category tiles only make sense on the landing state, and are
++                // fetched alongside the feed so the grid appears in one pass.
++                List<TenorCategory> categories = requestedQuery.isEmpty()
++                        ? TenorApiClient.categories()
++                        : null;
++
++                TenorApiClient.TenorPage page = TenorApiClient.search(requestedQuery, null);
++
++                Utils.runOnMainThread(() -> {
++                    if (token != requestToken || !isAdded()) return;
++
++                    progressBar.setVisibility(View.GONE);
++                    loading = false;
++
++                    if (categories != null && !categories.isEmpty()) {
++                        addCategories(categories);
++                    }
++
++                    if (page.results.isEmpty() && (categories == null || categories.isEmpty())) {
++                        setStatus(str("morphe_tenor_no_results"));
++                        return;
++                    }
++
++                    addGifs(page.results);
++                    nextCursor = page.next;
++                    exhausted = !page.hasMore();
++
++                    // A short first page leaves the scroll view unscrollable, so
++                    // the scroll listener would never ask for more.
++                    contentScroll.post(this::maybeLoadNextPage);
++                });
++            } catch (Exception ex) {
++                Logger.printException(() -> "Tenor request failed", ex);
++                Utils.runOnMainThread(() -> {
++                    if (token != requestToken || !isAdded()) return;
++                    progressBar.setVisibility(View.GONE);
++                    loading = false;
++                    setStatus(str("morphe_tenor_load_failed"));
++                });
++            }
++        });
++    }
++
++    /** Appends the following page, if the scroll is close enough to the end. */
++    private void maybeLoadNextPage() {
++        if (loading || exhausted || nextCursor.isEmpty() || !isAdded()) return;
++
++        int scrolled = contentScroll.getScrollY() + contentScroll.getHeight();
++        int total = columnContainer.getHeight();
++        if (total - scrolled > contentScroll.getHeight() * PREFETCH_SCREENS) return;
++
++        final int token = requestToken;
++        final String requestedQuery = query;
++        final String cursor = nextCursor;
++        loading = true;
++
++        Utils.runOnBackgroundThread(() -> {
++            try {
++                TenorApiClient.TenorPage page = TenorApiClient.search(requestedQuery, cursor);
++
++                Utils.runOnMainThread(() -> {
++                    if (token != requestToken || !isAdded()) return;
++
++                    loading = false;
++                    addGifs(page.results);
++                    nextCursor = page.next;
++                    exhausted = !page.hasMore() || page.results.isEmpty();
++                });
++            } catch (Exception ex) {
++                Logger.printException(() -> "Tenor pagination failed", ex);
++                Utils.runOnMainThread(() -> {
++                    if (token != requestToken || !isAdded()) return;
++                    loading = false;
++                    // Stop paging rather than retry in a loop against a failing endpoint.
++                    exhausted = true;
++                });
++            }
++        });
++    }
++
++    /** Debounces keystrokes into one search, and refreshes the suggestion row. */
++    private void scheduleSearch(String text) {
++        handler.removeCallbacksAndMessages(null);
++        handler.postDelayed(() -> {
++            String trimmed = text.trim();
++            if (trimmed.equals(query)) return;
++
++            query = trimmed;
++            loadFirstPage();
++            loadSuggestions(trimmed);
++        }, SEARCH_DEBOUNCE_MILLISECONDS);
++    }
++
++    private void loadSuggestions(String partial) {
++        if (partial.isEmpty()) {
++            suggestionScroll.setVisibility(View.GONE);
++            return;
++        }
++
++        final int token = requestToken;
++        Utils.runOnBackgroundThread(() -> {
++            try {
++                List<String> suggestions = TenorApiClient.autocomplete(partial);
++
++                Utils.runOnMainThread(() -> {
++                    if (token != requestToken || !isAdded()) return;
++                    showSuggestions(suggestions);
++                });
++            } catch (Exception ex) {
++                // Suggestions are an accessory; failing to load them is not worth surfacing.
++                Logger.printDebug(() -> "Tenor autocomplete failed: " + ex.getMessage());
++            }
++        });
++    }
++
++    // endregion
++
++    // region Grid population
++
++    private void clearGrid() {
++        for (LinearLayout column : columns) {
++            column.removeAllViews();
++        }
++        masonry.reset();
++    }
++
++    private void setStatus(String message) {
++        if (message == null) {
++            statusText.setVisibility(View.GONE);
++        } else {
++            statusText.setText(message);
++            statusText.setVisibility(View.VISIBLE);
++        }
++    }
++
++    private void addGifs(List<TenorGif> gifs) {
++        Activity activity = getActivity();
++        if (activity == null) return;
++
++        int spacing = dp(COLUMN_SPACING_DP);
++
++        for (TenorGif gif : gifs) {
++            int height = gif.scaledHeight(columnWidth);
++
++            ImageView cell = new ImageView(activity);
++            cell.setScaleType(ImageView.ScaleType.FIT_XY);
++            cell.setBackground(roundedRectangle(surfaceColor, dp(8)));
++            cell.setClipToOutline(true);
++            cell.setContentDescription(gif.description);
++            cell.setOnClickListener(view -> pick(gif));
++
++            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(columnWidth, height);
++            params.bottomMargin = spacing;
++
++            columns[masonry.place(height + spacing)].addView(cell, params);
++            GifImageLoader.load(cell, gif.previewUrl);
++        }
++    }
++
++    /**
++     * Adds the category tiles above the featured feed.
++     *
++     * <p>Tiles are placed through the same masonry accounting as GIFs so the feed
++     * that follows them stays level.
++     */
++    private void addCategories(List<TenorCategory> categories) {
++        Activity activity = getActivity();
++        if (activity == null) return;
++
++        int spacing = dp(COLUMN_SPACING_DP);
++        int height = (int) (columnWidth * 0.6f);
++
++        for (TenorCategory category : categories) {
++            FrameLayout tile = new FrameLayout(activity);
++            tile.setBackground(roundedRectangle(surfaceColor, dp(8)));
++            tile.setClipToOutline(true);
++            tile.setOnClickListener(view -> {
++                // Runs the category as an ordinary search, which also puts the term
++                // in the field so the user can edit it.
++                searchField.setText(category.searchTerm);
++                searchField.setSelection(category.searchTerm.length());
++            });
++
++            ImageView image = new ImageView(activity);
++            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
++            tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
++
++            // Scrim, so the label stays readable over a bright GIF.
++            View scrim = new View(activity);
++            scrim.setBackgroundColor(Color.argb(110, 0, 0, 0));
++            tile.addView(scrim, new FrameLayout.LayoutParams(-1, -1));
++
++            TextView label = new TextView(activity);
++            label.setText(category.name);
++            label.setTextColor(Color.WHITE);
++            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
++            label.setGravity(Gravity.CENTER);
++            FrameLayout.LayoutParams labelParams = new FrameLayout.LayoutParams(-1, -2);
++            labelParams.gravity = Gravity.CENTER;
++            tile.addView(label, labelParams);
++
++            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(columnWidth, height);
++            params.bottomMargin = spacing;
++
++            columns[masonry.place(height + spacing)].addView(tile, params);
++            GifImageLoader.load(image, category.imageUrl);
++        }
++    }
++
++    private void showSuggestions(List<String> suggestions) {
++        suggestionRow.removeAllViews();
++
++        if (suggestions.isEmpty()) {
++            suggestionScroll.setVisibility(View.GONE);
++            return;
++        }
++
++        Activity activity = getActivity();
++        if (activity == null) return;
++
++        for (String suggestion : suggestions) {
++            TextView chip = new TextView(activity);
++            chip.setText(suggestion);
++            chip.setTextColor(foregroundColor);
++            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
++            chip.setBackground(roundedRectangle(surfaceColor, dp(14)));
++            chip.setPadding(dp(12), dp(6), dp(12), dp(6));
++            chip.setOnClickListener(view -> {
++                searchField.setText(suggestion);
++                searchField.setSelection(suggestion.length());
++            });
++
++            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
++            params.rightMargin = dp(6);
++            suggestionRow.addView(chip, params);
++        }
++
++        suggestionScroll.setVisibility(View.VISIBLE);
++        suggestionScroll.scrollTo(0, 0);
++    }
++
++    private void pick(TenorGif gif) {
++        try {
++            if (listener != null) {
++                listener.onGifPicked(gif);
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "Tenor picker listener failure", ex);
++        } finally {
++            dismiss();
++        }
++    }
++
++    // endregion
++
++    // region Drawing helpers
++
++    private int dp(float value) {
++        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
++                getResources().getDisplayMetrics());
++    }
++
++    private static GradientDrawable roundedRectangle(int color, float radius) {
++        GradientDrawable drawable = new GradientDrawable();
++        drawable.setShape(GradientDrawable.RECTANGLE);
++        drawable.setColor(color);
++        drawable.setCornerRadius(radius);
++        return drawable;
++    }
++
++    /**
++     * Mixes {@code overlay} into {@code base}, used to derive surface and muted text
++     * colors from the app's own two theme colors. Doing it arithmetically keeps the
++     * picker correct in both light and dark mode without reading Reddit's theme.
++     *
++     * @param amount Proportion of {@code overlay}, from zero to one.
++     */
++    private static int blend(int base, int overlay, float amount) {
++        float inverse = 1f - amount;
++        return Color.rgb(
++                (int) (Color.red(base) * inverse + Color.red(overlay) * amount),
++                (int) (Color.green(base) * inverse + Color.green(overlay) * amount),
++                (int) (Color.blue(base) * inverse + Color.blue(overlay) * amount));
++    }
++
++    // endregion
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorRequestBuilder.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorRequestBuilder.java
+new file mode 100644
+index 0000000..3dd8ef2
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorRequestBuilder.java
+@@ -0,0 +1,137 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++import java.io.UnsupportedEncodingException;
++import java.net.URLEncoder;
++import java.util.LinkedHashMap;
++import java.util.Map;
++
++/**
++ * Builds Tenor v2 request URLs.
++ *
++ * <p>Pure string handling with no Android or network dependencies, so the query
++ * shapes can be asserted with a plain JDK. Every Tenor URL the picker issues is
++ * built here; nothing else in the package concatenates a query string.
++ *
++ * <p>The endpoints are the documented v2 API. What is undocumented is only where
++ * the key comes from (see {@link TenorWebConfig}), which means the request and
++ * response shapes below stay valid even if the key source is later swapped for a
++ * user supplied one.
++ */
++public final class TenorRequestBuilder {
++
++    /**
++     * Renditions requested from Tenor. Restricting this keeps responses small:
++     * unfiltered results carry a dozen formats per GIF that are never used.
++     *
++     * <ul>
++     *   <li>{@code tinygif} - grid preview.
++     *   <li>{@code gif} - what gets uploaded to Reddit when picked.
++     * </ul>
++     */
++    public static final String MEDIA_FILTER = "tinygif,gif";
++
++    /** Results per page. Matches what the picker can render before the user scrolls. */
++    public static final int PAGE_SIZE = 30;
++
++    private TenorRequestBuilder() {
++    }
++
++    /**
++     * Percent encodes a query parameter value.
++     *
++     * @return The encoded value, or the original string if the JVM somehow lacks UTF-8.
++     */
++    static String encode(String value) {
++        try {
++            return URLEncoder.encode(value, "UTF-8");
++        } catch (UnsupportedEncodingException ex) {
++            // Cannot happen: UTF-8 is required of every JVM.
++            return value;
++        }
++    }
++
++    /**
++     * Joins a base url, a path and query parameters into a request url.
++     *
++     * <p>Parameters with a null or empty value are dropped, so callers can pass an
++     * absent pagination cursor without branching.
++     */
++    static String build(String baseUrl, String path, Map<String, String> parameters) {
++        StringBuilder builder = new StringBuilder(baseUrl);
++        builder.append(path);
++
++        boolean first = true;
++        for (Map.Entry<String, String> parameter : parameters.entrySet()) {
++            String value = parameter.getValue();
++            if (value == null || value.isEmpty()) continue;
++
++            builder.append(first ? '?' : '&');
++            builder.append(parameter.getKey()).append('=').append(encode(value));
++            first = false;
++        }
++
++        return builder.toString();
++    }
++
++    /**
++     * Parameters every endpoint needs: the key pair identifying the caller, the
++     * locale, and the content filter.
++     */
++    private static Map<String, String> commonParameters(TenorWebConfig config, String contentFilter) {
++        Map<String, String> parameters = new LinkedHashMap<>();
++        parameters.put("key", config.apiKey);
++        parameters.put("client_key", config.clientKey);
++        parameters.put("contentfilter", contentFilter);
++        return parameters;
++    }
++
++    /**
++     * Search for GIFs matching {@code query}.
++     *
++     * @param position Pagination cursor from the previous response, or null for the first page.
++     */
++    public static String search(TenorWebConfig config, String query,
++                                String contentFilter, String position) {
++        Map<String, String> parameters = commonParameters(config, contentFilter);
++        parameters.put("q", query);
++        parameters.put("limit", String.valueOf(PAGE_SIZE));
++        parameters.put("media_filter", MEDIA_FILTER);
++        parameters.put("pos", position);
++        return build(config.apiUrl, "/search", parameters);
++    }
++
++    /**
++     * The default feed shown before the user types anything.
++     *
++     * @param position Pagination cursor from the previous response, or null for the first page.
++     */
++    public static String featured(TenorWebConfig config, String contentFilter, String position) {
++        Map<String, String> parameters = commonParameters(config, contentFilter);
++        parameters.put("limit", String.valueOf(PAGE_SIZE));
++        parameters.put("media_filter", MEDIA_FILTER);
++        parameters.put("pos", position);
++        return build(config.apiUrl, "/featured", parameters);
++    }
++
++    /** The category tiles shown alongside the default feed. */
++    public static String categories(TenorWebConfig config, String contentFilter) {
++        Map<String, String> parameters = commonParameters(config, contentFilter);
++        parameters.put("type", "featured");
++        return build(config.apiUrl, "/categories", parameters);
++    }
++
++    /** Type ahead completions for a partially typed query. */
++    public static String autocomplete(TenorWebConfig config, String query, String contentFilter) {
++        Map<String, String> parameters = commonParameters(config, contentFilter);
++        parameters.put("q", query);
++        parameters.put("limit", "8");
++        return build(config.apiUrl, "/autocomplete", parameters);
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorWebConfig.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorWebConfig.java
+new file mode 100644
+index 0000000..6fbe9f4
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/tenor/TenorWebConfig.java
+@@ -0,0 +1,141 @@
++/*
++ * Copyright 2026 Morphe.
++ * https://github.com/MorpheApp/morphe-patches
++ *
++ * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
++ */
++
++package app.morphe.extension.reddit.tenor;
++
++import java.nio.charset.StandardCharsets;
++import java.util.Base64;
++
++/**
++ * The credentials the picker talks to Tenor with.
++ *
++ * <p>Tenor's public v1 API was discontinued and v2 rejects any request without a
++ * valid key, so a key has to come from somewhere. Rather than ship one (a key in
++ * a public repository is scraped and revoked in short order), the picker reads
++ * the one tenor.com itself is serving: the site embeds its configuration as a
++ * base64 blob in a {@code <script id="data">} tag on every page.
++ *
++ * <p>This is the only undocumented part of the integration. Everything built on
++ * top of it is the ordinary, documented v2 API, so if the blob ever moves the
++ * damage is contained to {@link #extractEncodedPayload} and the picker can be
++ * pointed at a user supplied key by constructing this class directly.
++ *
++ * <p>Pure by design - no Android imports - so the parsing is testable with a
++ * plain JDK.
++ */
++public final class TenorWebConfig {
++
++    /** Page scraped for the configuration blob. Any tenor.com page carries it; the root is smallest. */
++    public static final String CONFIG_SOURCE_URL = "https://tenor.com/";
++
++    /**
++     * Marks the start of the configuration script. The id is what the site keys the
++     * blob by, and has outlived several redesigns of the surrounding markup.
++     */
++    private static final String SCRIPT_ID_MARKER = "<script id=\"data\"";
++
++    /** Field names inside the decoded blob. */
++    public static final String FIELD_API_URL = "API_V2_URL";
++    public static final String FIELD_API_KEY = "API_V2_KEY";
++    public static final String FIELD_CLIENT_KEY = "API_V2_CLIENT_KEY";
++
++    /** Used if the blob omits a field, which would otherwise leave an unusable config. */
++    private static final String DEFAULT_API_URL = "https://tenor.googleapis.com/v2";
++    private static final String DEFAULT_CLIENT_KEY = "tenor_web";
++
++    public final String apiUrl;
++    public final String apiKey;
++    public final String clientKey;
++
++    public TenorWebConfig(String apiUrl, String apiKey, String clientKey) {
++        this.apiUrl = isBlank(apiUrl) ? DEFAULT_API_URL : stripTrailingSlash(apiUrl);
++        this.apiKey = apiKey;
++        this.clientKey = isBlank(clientKey) ? DEFAULT_CLIENT_KEY : clientKey;
++    }
++
++    /** A config with no key cannot be used; callers must re-fetch instead of issuing a doomed request. */
++    public boolean isUsable() {
++        return !isBlank(apiKey);
++    }
++
++    private static boolean isBlank(String value) {
++        return value == null || value.trim().isEmpty();
++    }
++
++    private static String stripTrailingSlash(String value) {
++        return value.endsWith("/")
++                ? value.substring(0, value.length() - 1)
++                : value;
++    }
++
++    /**
++     * Pulls the base64 configuration payload out of a tenor.com page.
++     *
++     * <p>Matched by script id rather than by position or by a fixed attribute order,
++     * since the nonce attribute changes on every request and the tag order does not
++     * survive redesigns.
++     *
++     * @return The still encoded payload, or null if the page does not carry one.
++     */
++    public static String extractEncodedPayload(String html) {
++        if (html == null) return null;
++
++        int idIndex = html.indexOf(SCRIPT_ID_MARKER);
++        if (idIndex < 0) return null;
++
++        // Skip the remaining attributes to the end of the opening tag.
++        int contentStart = html.indexOf('>', idIndex);
++        if (contentStart < 0) return null;
++        contentStart++;
++
++        int contentEnd = html.indexOf("</script>", contentStart);
++        if (contentEnd < 0) return null;
++
++        String payload = html.substring(contentStart, contentEnd).trim();
++        return payload.isEmpty() ? null : payload;
++    }
++
++    /**
++     * Decodes the payload extracted by {@link #extractEncodedPayload} into JSON text.
++     *
++     * <p>Tolerates missing padding and embedded whitespace, both of which have shown
++     * up in the served blob at different times.
++     *
++     * @return The decoded JSON, or null if the payload is not valid base64.
++     */
++    public static String decodePayload(String encoded) {
++        if (encoded == null) return null;
++
++        try {
++            // The MIME decoder skips whitespace and other characters outside the
++            // base64 alphabet, which the plain decoder rejects outright.
++            byte[] decoded = Base64.getMimeDecoder().decode(padToQuad(encoded));
++            return new String(decoded, StandardCharsets.UTF_8);
++        } catch (IllegalArgumentException ex) {
++            return null;
++        }
++    }
++
++    /** Restores '=' padding, which the served payload has been observed to omit. */
++    private static String padToQuad(String encoded) {
++        String trimmed = encoded.trim();
++        int remainder = trimmed.length() % 4;
++        if (remainder == 0) return trimmed;
++
++        StringBuilder padded = new StringBuilder(trimmed);
++        for (int i = remainder; i < 4; i++) {
++            padded.append('=');
++        }
++        return padded.toString();
++    }
++
++    @Override
++    public String toString() {
++        // The key is deliberately not logged.
++        return "TenorWebConfig{" + apiUrl + " clientKey=" + clientKey + " hasKey=" + isUsable() + "}";
++    }
++}
+diff --git a/extensions/reddit/src/test/java/app/morphe/extension/reddit/tenor/TenorSelfTest.java b/extensions/reddit/src/test/java/app/morphe/extension/reddit/tenor/TenorSelfTest.java
+new file mode 100644
+index 0000000..fd6a3e7
+--- /dev/null
++++ b/extensions/reddit/src/test/java/app/morphe/extension/reddit/tenor/TenorSelfTest.java
+@@ -0,0 +1,176 @@
++package app.morphe.extension.reddit.tenor;
++
++/**
++ * Dependency-free self-test for the pure parts of the Tenor GIF picker:
++ * {@link TenorRequestBuilder}, {@link TenorWebConfig}, {@link TenorGif} and
++ * {@link MasonryColumns}. Runs with a plain JDK:
++ *
++ * <pre>
++ *   cd extensions/reddit/src
++ *   javac main/java/app/morphe/extension/reddit/tenor/TenorGif.java \
++ *         main/java/app/morphe/extension/reddit/tenor/TenorWebConfig.java \
++ *         main/java/app/morphe/extension/reddit/tenor/TenorRequestBuilder.java \
++ *         main/java/app/morphe/extension/reddit/tenor/MasonryColumns.java -d /tmp/tenor
++ *   javac -cp /tmp/tenor test/java/app/morphe/extension/reddit/tenor/TenorSelfTest.java -d /tmp/tenor
++ *   java  -cp /tmp/tenor app.morphe.extension.reddit.tenor.TenorSelfTest
++ * </pre>
++ *
++ * <p>The networked parts (the API client, the image loader, the picker UI) need
++ * an Android runtime and are not covered here.
++ */
++public final class TenorSelfTest {
++    private static int pass = 0, fail = 0;
++
++    private static void check(boolean condition, String name) {
++        if (condition) pass++; else fail++;
++        System.out.printf("%s  %s%n", condition ? "PASS" : "FAIL", name);
++    }
++
++    private static TenorWebConfig config() {
++        return new TenorWebConfig("https://tenor.googleapis.com/v2", "TESTKEY", "tenor_web");
++    }
++
++    private static void requestBuilderTests() {
++        System.out.println("\n-- TenorRequestBuilder --");
++
++        check("hello+world".equals(TenorRequestBuilder.encode("hello world")),
++                "encode turns spaces into +");
++        check("a%26b%3Dc".equals(TenorRequestBuilder.encode("a&b=c")),
++                "encode escapes query delimiters");
++
++        java.util.Map<String, String> parameters = new java.util.LinkedHashMap<>();
++        parameters.put("first", "1");
++        parameters.put("empty", "");
++        parameters.put("missing", null);
++        parameters.put("last", "2");
++        check("https://x/y?first=1&last=2".equals(TenorRequestBuilder.build("https://x", "/y", parameters)),
++                "build drops null and empty parameters");
++        check("https://x/y".equals(TenorRequestBuilder.build("https://x", "/y", new java.util.LinkedHashMap<>())),
++                "build omits the ? when nothing survives");
++
++        TenorWebConfig config = config();
++
++        String firstPage = TenorRequestBuilder.search(config, "happy cat", "off", null);
++        check(firstPage.startsWith("https://tenor.googleapis.com/v2/search?"), "search hits the search endpoint");
++        check(firstPage.contains("key=TESTKEY"), "search sends the api key");
++        check(firstPage.contains("client_key=tenor_web"), "search sends the client key");
++        check(firstPage.contains("q=happy+cat"), "search encodes the query");
++        check(firstPage.contains("media_filter=tinygif%2Cgif"), "search restricts the renditions");
++        check(firstPage.contains("limit=" + TenorRequestBuilder.PAGE_SIZE), "search sends the page size");
++        check(!firstPage.contains("pos="), "first page sends no cursor");
++
++        String secondPage = TenorRequestBuilder.search(config, "cat", "off", "CDIQ_cursor");
++        check(secondPage.contains("pos=CDIQ_cursor"), "later pages send the cursor");
++
++        String featured = TenorRequestBuilder.featured(config, "medium", null);
++        check(featured.contains("/featured?"), "featured hits the featured endpoint");
++        check(featured.contains("contentfilter=medium"), "featured passes the content filter through");
++
++        String categories = TenorRequestBuilder.categories(config, "high");
++        check(categories.contains("/categories?"), "categories hits the categories endpoint");
++        check(categories.contains("type=featured"), "categories asks for the featured set");
++
++        String autocomplete = TenorRequestBuilder.autocomplete(config, "ca", "off");
++        check(autocomplete.contains("/autocomplete?"), "autocomplete hits the autocomplete endpoint");
++        check(autocomplete.contains("q=ca"), "autocomplete sends the partial query");
++        check(autocomplete.contains("limit=8"), "autocomplete asks for a short list");
++    }
++
++    private static void webConfigTests() {
++        System.out.println("\n-- TenorWebConfig --");
++
++        // Nonce and attribute order match what tenor.com actually serves.
++        String html = "<html><head><script id=\"data\" type=\"text/x-cache\" nonce=\"abc123\">"
++                + "eyJBIjoiQiJ9</script><script id=\"store-cache\">{}</script></head></html>";
++        check("eyJBIjoiQiJ9".equals(TenorWebConfig.extractEncodedPayload(html)),
++                "payload is found past the nonce attribute");
++        check(TenorWebConfig.extractEncodedPayload("<html>no config here</html>") == null,
++                "missing script yields null");
++        check(TenorWebConfig.extractEncodedPayload("<script id=\"data\">unterminated") == null,
++                "unterminated script yields null");
++        check(TenorWebConfig.extractEncodedPayload("<script id=\"data\"></script>") == null,
++                "empty payload yields null");
++        check(TenorWebConfig.extractEncodedPayload(null) == null, "null html yields null");
++
++        check("{\"A\":\"B\"}".equals(TenorWebConfig.decodePayload("eyJBIjoiQiJ9")),
++                "payload decodes to json");
++        // "{}" encodes to "e30=", which the server has been seen to serve unpadded.
++        check("{}".equals(TenorWebConfig.decodePayload("e30")), "missing padding is restored");
++        check("{}".equals(TenorWebConfig.decodePayload("  e30=  ")), "surrounding whitespace is tolerated");
++        check(TenorWebConfig.decodePayload(null) == null, "null payload yields null");
++
++        // A distinctive key: a short one would match by chance inside "clientKey=".
++        TenorWebConfig full = new TenorWebConfig("https://tenor.googleapis.com/v2/", "SUPERSECRET", "web");
++        check("https://tenor.googleapis.com/v2".equals(full.apiUrl), "trailing slash is stripped");
++        check(full.isUsable(), "config with a key is usable");
++
++        TenorWebConfig sparse = new TenorWebConfig(null, "K", null);
++        check("https://tenor.googleapis.com/v2".equals(sparse.apiUrl), "missing url falls back to the v2 default");
++        check("tenor_web".equals(sparse.clientKey), "missing client key falls back to the web default");
++
++        check(!new TenorWebConfig("u", null, "c").isUsable(), "config without a key is unusable");
++        check(!new TenorWebConfig("u", "   ", "c").isUsable(), "blank key is unusable");
++        check(!full.toString().contains("SUPERSECRET"), "toString does not leak the key");
++    }
++
++    private static void gifTests() {
++        System.out.println("\n-- TenorGif --");
++
++        check(gif(200, 200).scaledHeight(100) == 100, "square scales to a square");
++        check(gif(400, 200).scaledHeight(100) == 50, "wide gif halves in height");
++        check(gif(200, 400).scaledHeight(100) == 200, "tall gif doubles in height");
++        check(gif(0, 0).scaledHeight(120) == 120, "missing dimensions fall back to square");
++        check(gif(-5, 10).scaledHeight(120) == 120, "negative dimensions fall back to square");
++        check(gif(10000, 1).scaledHeight(100) >= 1, "extreme ratio never scales below one pixel");
++    }
++
++    private static TenorGif gif(int width, int height) {
++        return new TenorGif("id", "description", "preview", width, height,
++                "full", width, height, 0, "https://tenor.com/view/id");
++    }
++
++    private static void masonryTests() {
++        System.out.println("\n-- MasonryColumns --");
++
++        MasonryColumns columns = new MasonryColumns(2);
++        check(columns.columnCount() == 2, "column count is reported");
++        check(columns.shortestColumn() == 0, "empty grid starts at the leftmost column");
++
++        check(columns.place(100) == 0, "first item goes left");
++        check(columns.place(50) == 1, "second item goes to the empty right column");
++        check(columns.place(20) == 1, "third item goes to the shorter right column");
++        check(columns.height(0) == 100 && columns.height(1) == 70, "heights accumulate per column");
++        check(columns.place(10) == 1, "placement keeps following the shorter column");
++
++        MasonryColumns tied = new MasonryColumns(3);
++        tied.place(10);
++        tied.place(10);
++        tied.place(10);
++        check(tied.shortestColumn() == 0, "an even grid ties back to the leftmost column");
++
++        MasonryColumns negative = new MasonryColumns(1);
++        negative.place(-40);
++        check(negative.height(0) == 0, "negative heights do not shrink a column");
++
++        columns.reset();
++        check(columns.height(0) == 0 && columns.height(1) == 0, "reset clears every column");
++
++        boolean threw = false;
++        try {
++            new MasonryColumns(0);
++        } catch (IllegalArgumentException expected) {
++            threw = true;
++        }
++        check(threw, "a grid needs at least one column");
++    }
++
++    public static void main(String[] args) {
++        requestBuilderTests();
++        webConfigTests();
++        gifTests();
++        masonryTests();
++
++        System.out.printf("%n%d passed, %d failed%n", pass, fail);
++        if (fail > 0) System.exit(1);
++    }
++}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
 new file mode 100644
-index 000000000..b82ffb0a8
+index 0000000..b82ffb0
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
 @@ -0,0 +1,100 @@
@@ -193,7 +2125,7 @@ index 000000000..b82ffb0a8
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
 new file mode 100644
-index 000000000..2edf469f1
+index 0000000..2edf469
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
 @@ -0,0 +1,154 @@
@@ -353,7 +2285,7 @@ index 000000000..2edf469f1
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
 new file mode 100644
-index 000000000..787f73fb9
+index 0000000..787f73f
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
 @@ -0,0 +1,51 @@
@@ -410,7 +2342,7 @@ index 000000000..787f73fb9
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java
 new file mode 100644
-index 000000000..ede7d41a4
+index 0000000..ede7d41
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java
 @@ -0,0 +1,333 @@
@@ -748,7 +2680,7 @@ index 000000000..ede7d41a4
 +    }
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-index c643cbe71..fed84a01b 100644
+index c643cbe..fed84a0 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 @@ -226,6 +226,7 @@ public class Settings extends SharedYouTubeSettings {
@@ -768,7 +2700,7 @@ index c643cbe71..fed84a01b 100644
      public static final BooleanSetting HIDE_COMMENTS_PREVIEW_COMMENT = new BooleanSetting("morphe_hide_comments_preview_comment", FALSE);
      public static final BooleanSetting HIDE_COMMENTS_SECTION = new BooleanSetting("morphe_hide_comments_section", FALSE);
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
-index 5d07eb4e7..8d1d1c072 100644
+index 5d07eb4..8d1d1c0 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
 @@ -10,6 +10,7 @@ import android.view.WindowInsets
@@ -793,7 +2725,7 @@ index 5d07eb4e7..8d1d1c072 100644
              super.dispatchTouchEvent(ev)
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 new file mode 100644
-index 000000000..7c0c98e5a
+index 0000000..7c0c98e
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 @@ -0,0 +1,46 @@
@@ -845,7 +2777,7 @@ index 000000000..7c0c98e5a
 +}
 diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java
 new file mode 100644
-index 000000000..ecccdb97b
+index 0000000..ecccdb9
 --- /dev/null
 +++ b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java
 @@ -0,0 +1,65 @@
@@ -916,7 +2848,7 @@ index 000000000..ecccdb97b
 +}
 diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
 new file mode 100644
-index 000000000..1f8946a5f
+index 0000000..1f8946a
 --- /dev/null
 +++ b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
 @@ -0,0 +1,89 @@
@@ -1010,7 +2942,7 @@ index 000000000..1f8946a5f
 +    }
 +}
 diff --git a/patches/build.gradle.kts b/patches/build.gradle.kts
-index 392e0e549..2b6a57f0c 100644
+index 392e0e5..2b6a57f 100644
 --- a/patches/build.gradle.kts
 +++ b/patches/build.gradle.kts
 @@ -2,12 +2,12 @@ group = "app.morphe"
@@ -1033,7 +2965,7 @@ index 392e0e549..2b6a57f0c 100644
  }
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
 new file mode 100644
-index 000000000..9810429fc
+index 0000000..9810429
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
 @@ -0,0 +1,66 @@
@@ -1104,7 +3036,7 @@ index 000000000..9810429fc
 +    }
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
-index 15e04b897..c9886afec 100644
+index 15e04b8..c9886af 100644
 --- a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 @@ -80,6 +80,8 @@ private const val EXPLORE_MENU_FILTER =
@@ -1132,8 +3064,32 @@ index 15e04b897..c9886afec 100644
          addLithoFilter(KEYWORD_FILTER)
          addLithoFilter(AISLIST_FILTER)
          addLithoFilter(CUSTOM_FILTER)
+diff --git a/patches/src/main/resources/addresources/values/reddit/strings.xml b/patches/src/main/resources/addresources/values/reddit/strings.xml
+index b9f5d2c..92797b7 100644
+--- a/patches/src/main/resources/addresources/values/reddit/strings.xml
++++ b/patches/src/main/resources/addresources/values/reddit/strings.xml
+@@ -63,6 +63,19 @@ Second \"item\" text"</string>
+     <string name="morphe_remove_nsfw_dialog_title">Remove NSFW warning dialog</string>
+     <string name="morphe_remove_nsfw_dialog_summary">Automatically accepts the NSFW content warning when visiting a subreddit</string>
+ 
++    <!-- Tenor GIF picker. -->
++    <string name="morphe_tenor_gif_picker_title">Use Tenor for GIFs</string>
++    <string name="morphe_tenor_gif_picker_summary">Replaces the built in Giphy picker with Tenor</string>
++    <string name="morphe_tenor_content_filter_title">GIF content filter</string>
++    <string name="morphe_tenor_content_filter_summary">How strictly Tenor filters results</string>
++    <string name="morphe_tenor_api_key_title">Tenor API key</string>
++    <string name="morphe_tenor_api_key_summary">Optional. Leave empty to use the key tenor.com publishes. Set your own Google Cloud Tenor key if results stop loading</string>
++    <string name="morphe_tenor_search_hint">Search Tenor</string>
++    <string name="morphe_tenor_close">Close</string>
++    <string name="morphe_tenor_powered_by">Powered by Tenor</string>
++    <string name="morphe_tenor_no_results">No GIFs found</string>
++    <string name="morphe_tenor_load_failed">Could not load GIFs. Check your connection and try again</string>
++
+     <string name="morphe_screen_miscellaneous_title">Miscellaneous</string>
+     <string name="morphe_about_title">About</string>
+     <string name="morphe_about_summary">Patch version and official links</string>
 diff --git a/patches/src/main/resources/addresources/values/youtube/strings.xml b/patches/src/main/resources/addresources/values/youtube/strings.xml
-index 74ef714ce..cacfb752a 100644
+index 74ef714..cacfb75 100644
 --- a/patches/src/main/resources/addresources/values/youtube/strings.xml
 +++ b/patches/src/main/resources/addresources/values/youtube/strings.xml
 @@ -246,6 +246,8 @@ Changes include:
@@ -1156,7 +3112,7 @@ index 74ef714ce..cacfb752a 100644
      <string name="morphe_copy_video_link_with_timestamp_button_title">Copy timestamp by default</string>
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
 new file mode 100644
-index 000000000..8629ca86a
+index 0000000..8629ca8
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
 @@ -0,0 +1,39 @@
@@ -1201,7 +3157,7 @@ index 000000000..8629ca86a
 +</vector>
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 new file mode 100644
-index 000000000..c320a0f5d
+index 0000000..c320a0f
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 @@ -0,0 +1,39 @@
@@ -1246,7 +3202,7 @@ index 000000000..c320a0f5d
 +</vector>
 diff --git a/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
 new file mode 100644
-index 000000000..33814e4a9
+index 0000000..33814e4
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
 @@ -0,0 +1,15 @@
