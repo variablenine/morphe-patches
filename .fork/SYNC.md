@@ -107,21 +107,32 @@ patch no longer applies cleanly):
 ## Automation (routine) setup
 
 The sync runs unattended as a claude.ai **Routine** ("Daily Morphe upstream sync", daily 09:00 UTC),
-which fires a fresh cloud session each time. Two things must be configured on the *routine itself*
+which fires a fresh cloud session each time. The setting that matters lives on the *routine itself*
 at [claude.ai/code/routines](https://claude.ai/code/routines) → edit routine — **not** on the cloud
 environment (the environment dialog only controls network access, env vars, and the setup script,
 and has no repository settings at all):
 
-1. **Repositories** — `variablenine/morphe-patches` must be attached, otherwise the session has no
-   push credentials. Note the fork is *public*, so `git clone`/`fetch` succeed even with no repo
-   attached; only the push reveals the problem. A routine created through the CLI/MCP
-   (`create_trigger`) has no repositories field, so it starts with none attached.
-2. **Permissions → Allow unrestricted branch pushes** — without this a routine may only push to
-   `claude/`-prefixed branches, and this procedure pushes to `dev`.
+1. **Repositories** — `variablenine/morphe-patches` must be attached. This is the one setting that
+   can strand a sync. It provides two separate things: git push credentials, *and* the GitHub MCP
+   tools (`mcp__github__*`) that steps 7–8 need to read CI job logs, mark the `dev → main` PR ready
+   and merge it — plain `git` cannot do those. A routine created through the CLI/MCP
+   (`create_trigger`) has no repositories field, so it starts with none attached; set it in the UI
+   afterwards. Note the fork is *public*, so `git clone`/`fetch` succeed even with no repo attached;
+   only the push and the missing GitHub tools reveal the problem — and by then the sync is done and
+   stuck just short of release.
 
-If (2) is unavailable or off, the sync still completes via the documented fallback: commit locally,
-push to `claude/sync-vX.Y.Z`, and open a PR into `dev` (then the normal `dev → main` flow follows).
-Prefer fixing the setting over relying on the fallback, since the fallback adds a second PR per sync.
+**Ignore the "stores no MCP connectors" warning** that `create_trigger` prints. Connectors are the
+claude.ai integration mechanism (Gmail, Linear, …); GitHub access here is *not* one of them and there
+is no GitHub connector to attach. Verified 2026-08-09: an account with zero connectors installed still
+gets full `mcp__github__*` tooling in a repo-attached session. Attaching the repository is sufficient.
+
+**Branch pushes.** A routine may be restricted to pushing `claude/`-prefixed branches, while this
+procedure pushes to `dev`. A UI toggle ("Allow unrestricted branch pushes") governs this, but a routine
+created via `create_trigger` is locked to permission mode `auto` and the mode cannot be changed in the
+UI afterwards — so the restriction may be permanent for such a routine. This is not a blocker: the
+documented fallback covers it. Commit locally, push to `claude/sync-vX.Y.Z`, and open a PR into `dev`
+(then the normal `dev → main` flow follows), at the cost of one extra PR per sync. To get direct `dev`
+pushes, recreate the routine from the routines UI rather than through `create_trigger`.
 
 An interactive session started from the repo already has push access, so a stuck automated sync can
 always be finished by hand from a normal session — that is how the v1.36.0 sync landed.
