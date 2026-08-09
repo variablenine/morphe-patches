@@ -16,7 +16,7 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-18 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+29 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
 
 **Feature: Hide brainrot comments (YouTube)**
@@ -43,6 +43,34 @@ patch no longer applies cleanly):
 | `patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml` | **New file.** Top-controls button, anchored `toStartOf @id/morphe_external_download_button`. |
 | `patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button{,_bold}.xml` | **New files.** Cat-face vector icon. |
 | `extensions/youtube/.../swipecontrols/SwipeControlsHostActivity.kt` | In `dispatchTouchEvent`, short-circuit swipe controls while `CatLockOverlay.isLocked()` (swipe controls act at the Activity level, ahead of the overlay view, so brightness/volume swipes must be suppressed while locked). Import `CatLockOverlay`. |
+
+**Feature: Tenor GIF picker (Reddit)** — replaces Reddit's built-in Giphy picker with a Tenor one,
+laid out like Discord's: search field, type-ahead suggestions, staggered animating grid, category
+tiles on the landing state.
+
+Status: **the picker library is complete; the bytecode hook and the upload path are not yet written**
+(both need the Reddit APK to fingerprint against). Until `TenorGifPickerPatch.kt` exists, none of these
+classes are reachable at runtime and no Tenor preference is shown — they compile and self-test only.
+
+| File | Change |
+|---|---|
+| `extensions/reddit/.../tenor/TenorGif.java` | **New file.** Result model; carries preview and full renditions separately (the preview must never be what gets uploaded). Android-free so it self-tests. |
+| `extensions/reddit/.../tenor/TenorCategory.java` | **New file.** Category tile model. |
+| `extensions/reddit/.../tenor/TenorWebConfig.java` | **New file.** Tenor credentials. Tenor v1 is discontinued and v2 rejects keyless requests, so the key is scraped from the base64 `<script id="data">` block tenor.com embeds on every page. **This is the only undocumented dependency in the feature** — if the picker stops loading, look here first. Android-free so it self-tests. |
+| `extensions/reddit/.../tenor/TenorRequestBuilder.java` | **New file.** Builds every v2 URL (`/search`, `/featured`, `/categories`, `/autocomplete`). Android-free so it self-tests. |
+| `extensions/reddit/.../tenor/MasonryColumns.java` | **New file.** Shortest-column-first placement for the staggered grid; incremental so paged-in results never reflow what is already on screen. Android-free so it self-tests. |
+| `extensions/reddit/.../tenor/TenorApiClient.java` | **New file.** Blocking v2 client. On HTTP 400/403 it discards the scraped key, re-fetches and retries once — that retry is what survives tenor.com rotating its key. Skipped when the user supplied their own. |
+| `extensions/reddit/.../tenor/GifImageLoader.java` | **New file.** Downloads and decodes previews (`ImageDecoder` → `AnimatedImageDrawable`, API 28+, matching the module's minSdk). Caches encoded bytes, not drawables — an `AnimatedImageDrawable` cannot be attached to two views. |
+| `extensions/reddit/.../tenor/TenorGifPickerDialog.java` | **New file.** The picker UI, built in code (the extension has no resources of its own, as with the settings screen). Colors derive from `Utils.getAppBackgroundColor()`/`getAppForegroundColor()` by blending, so it follows Reddit's light/dark theme without reading it. |
+| `extensions/reddit/src/test/.../tenor/TenorSelfTest.java` | **New file.** Plain-javac self-test over the four Android-free classes; must print `52 passed, 0 failed`. |
+| `extensions/reddit/.../settings/Settings.java` | Add `TENOR_GIF_PICKER`, `TENOR_CONTENT_FILTER` (`contentfilter`: off/low/medium/high, default medium) and `TENOR_API_KEY` (optional user-supplied v2 key; empty means use the scraped one). |
+| `patches/src/main/resources/addresources/values/reddit/strings.xml` | Add the `morphe_tenor_*` strings. |
+
+**Still to do (needs the Reddit APK):** `TenorGifPickerPatch.kt` + `Fingerprints.kt` to intercept the
+Giphy picker launch and call into the extension; the upload path that pushes the chosen GIF through
+Reddit's own comment media upload so it renders inline (a bare Tenor link does not — Reddit only
+inline-embeds Giphy via `![gif](giphy|id)`); and the preference wiring, which is gated on
+`isPatchIncluded()` and so cannot be added before the patch exists.
 
 **Fork infrastructure (not tied to a feature)**
 
@@ -86,7 +114,9 @@ patch no longer applies cleanly):
    the `.rej` hunks manually using the semantics table above (upstream may have refactored the touched
    files). **Regenerate `.fork/upstream-delta.patch`** against the new tree afterwards so the next sync
    starts clean.
-5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11).
+5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27,
+   AlternatingTapUnlockSelfTest 11/11, TenorSelfTest 52/52). Note the cloud session has no Android
+   SDK, so the extension code itself cannot be compiled locally — CI is the only compile gate.
 6. Update the state markers in this file. Commit everything as
    `bump: Sync upstream Morphe patches vX.Y.Z` (the `bump:` type produces a patch release), push to `dev`.
    If the push to `dev` is rejected with 403 / a branch restriction, see **Automation (routine) setup**

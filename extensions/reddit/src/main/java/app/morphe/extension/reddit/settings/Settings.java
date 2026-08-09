@@ -45,6 +45,18 @@ public class Settings extends BaseSettings {
     public static final BooleanSetting REMOVE_NOTIFICATION_DIALOG = new BooleanSetting("morphe_remove_notification_dialog", FALSE, true);
     public static final BooleanSetting SHOW_VIEW_COUNT = new BooleanSetting("morphe_show_view_count", FALSE, true);
 
+    // Tenor GIF picker
+    public static final BooleanSetting TENOR_GIF_PICKER = new BooleanSetting("morphe_tenor_gif_picker", FALSE, true);
+    /**
+     * Passed to Tenor as {@code contentfilter}. One of off, low, medium or high.
+     */
+    public static final StringSetting TENOR_CONTENT_FILTER = new StringSetting("morphe_tenor_content_filter", "medium");
+    /**
+     * Optional user supplied Tenor v2 key. When empty the picker uses the key
+     * tenor.com publishes for its own web client.
+     */
+    public static final StringSetting TENOR_API_KEY = new StringSetting("morphe_tenor_api_key", "");
+
     // Miscellaneous
     public static final BooleanSetting OPEN_LINKS_DIRECTLY = new BooleanSetting("morphe_open_links_directly", TRUE);
     public static final BooleanSetting OPEN_LINKS_EXTERNALLY = new BooleanSetting("morphe_open_links_externally", TRUE);
