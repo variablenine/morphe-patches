@@ -9,8 +9,8 @@ it too.
 
 ## State markers (update on every sync)
 
-- **Upstream baseline:** stable tag `v1.39.1` (commit `1e6f080319db`)
-- **Last synced upstream release:** v1.39.1 (2026-08-09)
+- **Upstream baseline:** stable tag `v1.40.0` (commit `38c13fa35e05`)
+- **Last synced upstream release:** v1.40.0 (2026-08-24)
 
 ## What is fork-local
 
@@ -48,7 +48,7 @@ patch no longer applies cleanly):
 
 | File | Change |
 |---|---|
-| `patches/build.gradle.kts` | `group = "app.variablenine"`; personalized `about {}` block (name "variablenine Patches", fork notice, source URL). |
+| `patches/build.gradle.kts` | Personalized `about {}` block (name "variablenine Patches", fork notice, source URL). `group` stays upstream's `app.morphe` — do not change it. |
 | `.github/workflows/release.yml` | Add `issues: write` and `pull-requests: write` to job permissions. **Remove** the Morphe-only tail steps (`Generate website deploy token` → `Trigger website deploy` → `Wait/Setup Python/Send FCM push`): they dispatch to `MorpheApp/morphe-website` and push FCM to Morphe's app users via secrets this fork lacks, so they only ever fail on a published release and email the owner. Keep them removed on every sync. Also renames the Attest `subject-name` to "variablenine Patches". |
 | `.github/workflows/open_pull_request.yml` | Add workflow-level `permissions: contents: read, pull-requests: write`. |
 
