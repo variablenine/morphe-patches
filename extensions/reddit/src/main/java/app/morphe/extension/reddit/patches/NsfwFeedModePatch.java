@@ -96,8 +96,11 @@ public final class NsfwFeedModePatch {
 
             if (!reportedFirstListing) {
                 reportedFirstListing = true;
-                Utils.showToastShort("NSFW mode: kept " + result.nsfwItems.size()
-                        + " of " + list.size() + " posts");
+                Utils.showToastLong("NSFW mode: kept " + result.nsfwItems.size()
+                        + " of " + list.size() + " posts"
+                        // The drawer row has no reliable channel of its own when it fails to
+                        // appear, and this toast is known to reach the screen.
+                        + "\nDrawer row: " + NsfwDrawerRow.diagnostic());
             }
 
             return result.nsfwItems;
