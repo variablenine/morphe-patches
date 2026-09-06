@@ -669,10 +669,10 @@ index 000000000..49aaeaa86
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
 new file mode 100644
-index 000000000..ecc27f682
+index 000000000..62438a9d0
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
-@@ -0,0 +1,274 @@
+@@ -0,0 +1,284 @@
 +package app.morphe.extension.reddit.patches;
 +
 +import java.lang.reflect.Field;
@@ -731,7 +731,15 @@ index 000000000..ecc27f682
 +    private static volatile int nsfwTitleId = UNRESOLVED;
 +
 +    /** How far the row injection got, for on-device diagnosis. */
-+    private static volatile String diagnostic = "hook never ran";
++    private static volatile String rowDiagnostic = "row hook never ran";
++
++    /**
++     * How many drawer taps the click hook has seen. Distinguishes "the click hook was never
++     * applied" from "it runs but did not recognise the row", which look identical from the
++     * outside: in both cases tapping does nothing.
++     */
++    private static final java.util.concurrent.atomic.AtomicInteger tapsSeen =
++            new java.util.concurrent.atomic.AtomicInteger();
 +
 +    private static volatile boolean explainedFallback;
 +
@@ -746,10 +754,10 @@ index 000000000..ecc27f682
 +    }
 +
 +    /**
-+     * @return How far the drawer row injection got.
++     * @return How far the drawer injection got, for on-device diagnosis.
 +     */
 +    public static String diagnostic() {
-+        return diagnostic;
++        return rowDiagnostic + ", taps seen " + tapsSeen.get();
 +    }
 +
 +    /**
@@ -790,7 +798,7 @@ index 000000000..ecc27f682
 +                    return items;
 +                }
 +
-+                diagnostic = "added";
++                rowDiagnostic = "row added";
 +                Logger.printDebug(() -> "NSFW mode: added drawer row after Popular");
 +
 +                List<Object> augmented = new ArrayList<>(items.size() + 1);
@@ -823,6 +831,8 @@ index 000000000..ecc27f682
 +     */
 +    public static boolean onDrawerActionDispatched(Object presenter, Object action) {
 +        try {
++            tapsSeen.incrementAndGet();
++
 +            int nsfwId = nsfwTitleId();
 +            if (presenter == null || action == null || nsfwId == 0) {
 +                return false;
@@ -917,8 +927,8 @@ index 000000000..ecc27f682
 +     * Records a diagnostic, without overwriting a success from an earlier drawer build.
 +     */
 +    private static void setDiagnostic(String message) {
-+        if (!"added".equals(diagnostic)) {
-+            diagnostic = message;
++        if (!"row added".equals(rowDiagnostic)) {
++            rowDiagnostic = message;
 +        }
 +    }
 +
@@ -2742,7 +2752,7 @@ index 000000000..f911d5534
 +)
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 new file mode 100644
-index 000000000..ab2cd0526
+index 000000000..535904034
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 @@ -0,0 +1,129 @@
@@ -2790,7 +2800,7 @@ index 000000000..ab2cd0526
 +                addInstructions(
 +                    index,
 +                    """
-+                        invoke-static { v$register }, $EXTENSION_CLASS->filterListing(Ljava/util/List;)Ljava/util/List;
++                        invoke-static/range { v$register .. v$register }, $EXTENSION_CLASS->filterListing(Ljava/util/List;)Ljava/util/List;
 +                        move-result-object v$register
 +                    """
 +                )
@@ -2813,7 +2823,7 @@ index 000000000..ab2cd0526
 +                addInstructions(
 +                    0,
 +                    """
-+                        invoke-static { $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
++                        invoke-static/range { $register .. $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
 +                        move-result-object $register
 +                    """
 +                )
@@ -2857,7 +2867,7 @@ index 000000000..ab2cd0526
 +                addInstructionsWithLabels(
 +                    0,
 +                    """
-+                        invoke-static { p0, p1 }, $DRAWER_EXTENSION_CLASS->onDrawerActionDispatched(Ljava/lang/Object;Ljava/lang/Object;)Z
++                        invoke-static/range { p0 .. p1 }, $DRAWER_EXTENSION_CLASS->onDrawerActionDispatched(Ljava/lang/Object;Ljava/lang/Object;)Z
 +                        move-result v$free
 +                        if-eqz v$free, :not_handled
 +                        return-void

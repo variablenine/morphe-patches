@@ -42,7 +42,7 @@ val nsfwFeedModePatch = bytecodePatch(
                 addInstructions(
                     index,
                     """
-                        invoke-static { v$register }, $EXTENSION_CLASS->filterListing(Ljava/util/List;)Ljava/util/List;
+                        invoke-static/range { v$register .. v$register }, $EXTENSION_CLASS->filterListing(Ljava/util/List;)Ljava/util/List;
                         move-result-object v$register
                     """
                 )
@@ -65,7 +65,7 @@ val nsfwFeedModePatch = bytecodePatch(
                 addInstructions(
                     0,
                     """
-                        invoke-static { $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
+                        invoke-static/range { $register .. $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
                         move-result-object $register
                     """
                 )
@@ -109,7 +109,7 @@ val nsfwFeedModePatch = bytecodePatch(
                 addInstructionsWithLabels(
                     0,
                     """
-                        invoke-static { p0, p1 }, $DRAWER_EXTENSION_CLASS->onDrawerActionDispatched(Ljava/lang/Object;Ljava/lang/Object;)Z
+                        invoke-static/range { p0 .. p1 }, $DRAWER_EXTENSION_CLASS->onDrawerActionDispatched(Ljava/lang/Object;Ljava/lang/Object;)Z
                         move-result v$free
                         if-eqz v$free, :not_handled
                         return-void

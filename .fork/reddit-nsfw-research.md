@@ -251,3 +251,33 @@ failure suppresses both hooks) did not match on 2026.14.0 — most likely the
 sequence differs there. The section fingerprint is a copy of the shipping
 `hideSidebarComponentsPatch` one and is more likely sound; decoupling the two so a click-hook
 miss does not also cost the row would at least distinguish the two failures.
+
+## The silent killer: non-range `invoke-static` cannot reach high parameter registers
+
+Three hooks, one difference, verified by reading register counts straight out of the 2026.14.0 dex
+(androguard, `code_item.registers_size` / `ins_size`):
+
+| Method | registers | ins | `p0` | outcome |
+|---|---|---|---|---|
+| `u.b(List, Collection, ...)` — section builder | 7 | 6 | **v1** | row appeared |
+| `y.a(n)` — drawer click router | 36 | 2 | **v34** | hook silently absent |
+| `d.a(List, FeedLayout, Continuation)` — `getFeedElements` | 23 | 4 | **v19** | hook silently absent |
+
+`invoke-static {vX}` encodes each register in 4 bits, so it only addresses v0–v15. In a large
+method the parameter registers sit at the *top* of the frame, far above that, and the smali
+simply fails to assemble. Wrapped in a `try`/`catch`, that failure looks identical to a
+fingerprint miss: no hook, no crash, no message.
+
+The section hook survived only because it was copied from `hideSidebarComponentsPatch`, which
+already used `invoke-static/range`.
+
+**Rule: always use `invoke-static/range { pN .. pM }` for parameter registers.** It is correct at
+any register number and costs nothing when the register is low. Never assume a parameter is
+reachable by the fixed form, and never let a `try`/`catch` hide an assembly error without also
+reporting it - the diagnostics were reporting the row's state while saying nothing about the two
+hooks that were actually missing.
+
+Fingerprint anchors, verified present in the same dex: `y.a` is `public final void` and contains
+exactly one `new-instance CommunityDrawerPresenter$handleGenericItemClicked$1`; `d.a` is
+`public final`, returns `Ljava/lang/Object;` and contains exactly one
+`new-instance RedditListingFeedElementMapper$getFeedElements$1`. Both fingerprints resolve.
