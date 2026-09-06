@@ -669,12 +669,14 @@ index 000000000..49aaeaa86
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
 new file mode 100644
-index 000000000..0e9db0e14
+index 000000000..ecc27f682
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,274 @@
 +package app.morphe.extension.reddit.patches;
 +
++import java.lang.reflect.Field;
++import java.lang.reflect.Modifier;
 +import java.util.ArrayList;
 +import java.util.Collection;
 +import java.util.List;
@@ -807,6 +809,77 @@ index 000000000..0e9db0e14
 +    }
 +
 +    /**
++     * Injection point. Handles a drawer action before the app routes it.
++     *
++     * <p>The router receives an action carrying a row index rather than the row itself, and reads
++     * the row out of one of the presenter's own lists. Both the action's index field and that
++     * list are obfuscated, so rather than naming either, this tries every list the presenter
++     * holds and only acts when the row at that index carries the NSFW row's own title resource
++     * id. A wrong list therefore does nothing instead of hijacking someone else's tap.
++     *
++     * @param presenter The drawer presenter.
++     * @param action    The action being routed.
++     * @return Whether this was a tap on the NSFW row, and has been handled.
++     */
++    public static boolean onDrawerActionDispatched(Object presenter, Object action) {
++        try {
++            int nsfwId = nsfwTitleId();
++            if (presenter == null || action == null || nsfwId == 0) {
++                return false;
++            }
++
++            int index = firstIntField(action);
++            if (index < 0) {
++                return false;
++            }
++
++            for (Field field : presenter.getClass().getDeclaredFields()) {
++                if (Modifier.isStatic(field.getModifiers())
++                        || !List.class.isAssignableFrom(field.getType())) {
++                    continue;
++                }
++
++                field.setAccessible(true);
++                Object value = field.get(presenter);
++                if (!(value instanceof List)) {
++                    continue;
++                }
++
++                List<?> rows = (List<?>) value;
++                if (index >= rows.size()) {
++                    continue;
++                }
++
++                if (DrawerRowCloner.hasIntField(rows.get(index), nsfwId)) {
++                    return onDrawerRowClicked(rows.get(index));
++                }
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "onDrawerActionDispatched failure", ex);
++        }
++
++        return false;
++    }
++
++    /**
++     * @return The first int field's value, or -1 if there is none.
++     */
++    private static int firstIntField(Object object) {
++        try {
++            for (Field field : object.getClass().getDeclaredFields()) {
++                if (Modifier.isStatic(field.getModifiers()) || field.getType() != int.class) {
++                    continue;
++                }
++                field.setAccessible(true);
++                return field.getInt(object);
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "firstIntField failure", ex);
++        }
++        return -1;
++    }
++
++    /**
 +     * Injection point. Handles a tap on a drawer row.
 +     *
 +     * @param row The row that was tapped.
@@ -876,10 +949,10 @@ index 000000000..0e9db0e14
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
 new file mode 100644
-index 000000000..edfa02e6f
+index 000000000..1c2b3f32e
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,138 @@
 +package app.morphe.extension.reddit.patches;
 +
 +import java.util.List;
@@ -912,14 +985,13 @@ index 000000000..edfa02e6f
 +     * Whether the "no item was understood" warning has already been logged.
 +     * Only logged once, since this runs on every page of every feed.
 +     */
-+    private static volatile boolean loggedUnreadableListing;
-+
 +    /**
 +     * Whether the one-off diagnostic toast has been shown this app start. Temporary: it exists
 +     * to answer, on a real device, whether this listing hook is reached at all on a given Reddit
 +     * version - something no amount of decompiling settles. Remove once that is known.
 +     */
-+    private static volatile boolean reportedFirstListing;
++    private static final java.util.Set<String> reportedSources =
++            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 +
 +    /**
 +     * @return If this patch was included during patching.
@@ -944,6 +1016,22 @@ index 000000000..edfa02e6f
 +    }
 +
 +    /**
++     * Injection point. Filters the posts the modern feed builds its elements from.
++     *
++     * <p>This is the hook that reaches the screen. {@link #filterListing} sits on the cache path -
++     * on device it filtered a listing to nothing while the rendered feed carried on unchanged -
++     * whereas every post that gets displayed passes through here on its way to becoming a feed
++     * element, whatever fetched it.
++     *
++     * @param links The posts about to be turned into feed elements.
++     * @return Only the NSFW posts, or the unchanged list if NSFW mode is off or nothing was
++     *         readable.
++     */
++    public static List<?> filterFeedLinks(List<?> links) {
++        return filter(links, "feed");
++    }
++
++    /**
 +     * Injection point. Filters the children of a feed listing.
 +     *
 +     * @param list The posts the listing was built with.
@@ -951,6 +1039,10 @@ index 000000000..edfa02e6f
 +     *         or the listing could not be read.
 +     */
 +    public static List<?> filterListing(List<?> list) {
++        return filter(list, "listing");
++    }
++
++    private static List<?> filter(List<?> list, String source) {
 +        try {
 +            if (list == null || list.isEmpty() || !isNsfwModeEnabled()) {
 +                return list;
@@ -962,13 +1054,12 @@ index 000000000..edfa02e6f
 +                // Not one item of this listing exposed an NSFW flag, which means the model
 +                // changed rather than that the page happens to hold no 18+ posts. Fail open:
 +                // showing the feed unfiltered is a far better failure than silently emptying it.
-+                if (!loggedUnreadableListing) {
-+                    loggedUnreadableListing = true;
++                if (reportedSources.add("unreadable-" + source)) {
 +                    String model = describeFirstItem(list);
 +                    Logger.printInfo(() -> "NSFW mode: no NSFW flag found on "
 +                            + model + ", leaving listings unfiltered");
-+                    Utils.showToastLong("NSFW mode: could not read " + model
-+                            + ", feed left unfiltered");
++                    Utils.showToastLong("NSFW mode (" + source + "): could not read "
++                            + model + ", left unfiltered");
 +                }
 +                return list;
 +            }
@@ -976,10 +1067,9 @@ index 000000000..edfa02e6f
 +            Logger.printDebug(() -> "NSFW mode: kept " + result.nsfwItems.size()
 +                    + " of " + list.size() + " posts");
 +
-+            if (!reportedFirstListing) {
-+                reportedFirstListing = true;
-+                Utils.showToastLong("NSFW mode: kept " + result.nsfwItems.size()
-+                        + " of " + list.size() + " posts"
++            if (reportedSources.add(source)) {
++                Utils.showToastLong("NSFW mode (" + source + "): kept "
++                        + result.nsfwItems.size() + " of " + list.size() + " posts"
 +                        // The drawer row has no reliable channel of its own when it fails to
 +                        // appear, and this toast is known to reach the screen.
 +                        + "\nDrawer row: " + NsfwDrawerRow.diagnostic());
@@ -2507,10 +2597,10 @@ index 63fc58ee8..8352f4b9d 100644
  }
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
 new file mode 100644
-index 000000000..33b7faf2b
+index 000000000..f911d5534
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,139 @@
 +package app.morphe.patches.reddit.layout.nsfw
 +
 +import app.morphe.patcher.Fingerprint
@@ -2606,29 +2696,45 @@ index 000000000..33b7faf2b
 +)
 +
 +/**
-+ * The drawer's click router. Reddit renamed the enclosing class and method, but kept the name of
-+ * the lambda class this method instantiates, which makes a stable anchor.
++ * Where the modern feed turns a listing of posts into feed elements.
 + *
-+ * The tapped row is not a parameter: it is looked up from a map and cast, so the match walks to
-+ * that cast and the patch reads the row from the register it lands in.
++ * This is the hook that matters. `Listing` carries `Link` objects with their `over18` flag, but
++ * on-device testing showed emptying `Listing.children` leaves the rendered feed untouched: that
++ * model is the cache path (Reddit's own Room schema calls its tables `listing` and `link`).
++ * Posts reach the screen through this mapper instead, whatever fetched them, and its list really
++ * is `List<Link>` - the method body casts each element to `com.reddit.domain.model.Link`.
++ *
++ * Anchored on the suspend continuation class, whose name Reddit does not obfuscate, so the match
++ * does not depend on the enclosing class or method keeping their names.
++ */
++internal object NsfwFeedElementMapperFingerprint : Fingerprint(
++    returnType = "Ljava/lang/Object;",
++    filters = listOf(
++        newInstance(
++            type = $$"Lcom/reddit/feeds/impl/data/mapper/link/RedditListingFeedElementMapper$getFeedElements$1;"
++        )
++    ),
++    custom = { method, _ ->
++        method.parameters.any { it.startsWith("Ljava/util/List;") }
++    }
++)
++
++/**
++ * The drawer's click router.
++ *
++ * The previous anchor here assumed the tapped row was fetched from a map and cast, which is how
++ * a later app version does it. On 2026.14.0 the router instead receives an *action* carrying an
++ * index and reads the row out of its own list, so nothing matched and the row was never added
++ * either - the two hooks used to be applied together.
++ *
++ * Anchoring on the lambda class Reddit leaves unobfuscated avoids guessing at either shape; the
++ * extension resolves the row from the action reflectively and only acts when it finds its own
++ * title resource id, so a wrong guess is inert rather than harmful.
 + */
 +internal object NsfwDrawerItemClickFingerprint : Fingerprint(
 +    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
 +    returnType = "V",
 +    filters = listOf(
-+        methodCall(
-+            name = "get",
-+            parameters = listOf("Ljava/lang/Object;"),
-+            returnType = "Ljava/lang/Object;"
-+        ),
-+        opcode(
-+            Opcode.MOVE_RESULT_OBJECT,
-+            location = MatchAfterImmediately()
-+        ),
-+        opcode(
-+            Opcode.CHECK_CAST,
-+            location = MatchAfterImmediately()
-+        ),
 +        newInstance(
 +            type = $$"Lcom/reddit/screens/drawer/community/CommunityDrawerPresenter$handleGenericItemClicked$1;"
 +        )
@@ -2636,10 +2742,10 @@ index 000000000..33b7faf2b
 +)
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 new file mode 100644
-index 000000000..a7d8898d2
+index 000000000..ab2cd0526
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,129 @@
 +package app.morphe.patches.reddit.layout.nsfw
 +
 +import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
@@ -2693,35 +2799,38 @@ index 000000000..a7d8898d2
 +
 +        setExtensionIsPatchIncluded(EXTENSION_CLASS)
 +
++        // region Modern feed
++
++        // The listing hook above is the cache path: on device it filters a listing to nothing
++        // while the rendered feed carries on unchanged. Posts reach the screen through this
++        // mapper, so this is the hook that actually filters what is on screen.
++        try {
++            NsfwFeedElementMapperFingerprint.method.apply {
++                val listParameter = parameterTypes.indexOfFirst { it == "Ljava/util/List;" }
++                // Instance method, so parameter n is register p(n + 1).
++                val register = "p${listParameter + 1}"
++
++                addInstructions(
++                    0,
++                    """
++                        invoke-static { $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
++                        move-result-object $register
++                    """
++                )
++            }
++        } catch (ex: Exception) {
++            Logger.getLogger(this::class.java.name).warning(
++                "'NSFW mode' could not hook the feed element mapper: ${ex.message}"
++            )
++        }
++
++        // endregion
++
 +        // region Navigation drawer row
 +
-+        // Best effort. The drawer is a far more volatile surface than the listing model, so a
-+        // miss here costs the row and leaves the filter and its settings toggle working, rather
-+        // than failing the whole patch and leaving the user unable to build at all.
++        // Best effort, and the two hooks are independent on purpose: wiring the row to the click
++        // router meant one bad fingerprint cost both, which is exactly what happened on 2026.14.0.
 +        try {
-+            // Resolve the click router first and inject it first: a row that cannot respond to
-+            // taps is worse than no row, so the two hooks go in together or not at all.
-+            NsfwDrawerItemClickFingerprint.let {
-+                it.method.apply {
-+                    // The tapped row lands in the register of the cast that follows the lookup.
-+                    val castIndex = it.instructionMatches[2].index
-+                    val rowRegister = getInstruction<OneRegisterInstruction>(castIndex).registerA
-+                    val free = findFreeRegister(castIndex, rowRegister)
-+
-+                    addInstructionsWithLabels(
-+                        castIndex + 1,
-+                        """
-+                            invoke-static { v$rowRegister }, $DRAWER_EXTENSION_CLASS->onDrawerRowClicked(Ljava/lang/Object;)Z
-+                            move-result v$free
-+                            if-eqz v$free, :not_handled
-+                            return-void
-+                            :not_handled
-+                            nop
-+                        """
-+                    )
-+                }
-+            }
-+
 +            NsfwDrawerSectionFingerprint.method.apply {
 +                val collectionParameter = parameterTypes.indexOf("Ljava/util/Collection;")
 +
@@ -2737,8 +2846,29 @@ index 000000000..a7d8898d2
 +            setExtensionIsPatchIncluded(DRAWER_EXTENSION_CLASS)
 +        } catch (ex: Exception) {
 +            Logger.getLogger(this::class.java.name).warning(
-+                "'NSFW mode' could not add its navigation drawer row: ${ex.message}. " +
-+                        "Feed filtering and the Morphe settings toggle are unaffected."
++                "'NSFW mode' could not add its navigation drawer row: ${ex.message}"
++            )
++        }
++
++        try {
++            NsfwDrawerItemClickFingerprint.method.apply {
++                val free = findFreeRegister(0)
++
++                addInstructionsWithLabels(
++                    0,
++                    """
++                        invoke-static { p0, p1 }, $DRAWER_EXTENSION_CLASS->onDrawerActionDispatched(Ljava/lang/Object;Ljava/lang/Object;)Z
++                        move-result v$free
++                        if-eqz v$free, :not_handled
++                        return-void
++                        :not_handled
++                        nop
++                    """
++                )
++            }
++        } catch (ex: Exception) {
++            Logger.getLogger(this::class.java.name).warning(
++                "'NSFW mode' could not hook the drawer click router: ${ex.message}"
 +            )
 +        }
 +
