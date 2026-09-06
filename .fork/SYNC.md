@@ -16,7 +16,7 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-18 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+27 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
 
 **Feature: Hide brainrot comments (YouTube)**
@@ -43,6 +43,22 @@ patch no longer applies cleanly):
 | `patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml` | **New file.** Top-controls button, anchored `toStartOf @id/morphe_external_download_button`. |
 | `patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button{,_bold}.xml` | **New files.** Cat-face vector icon. |
 | `extensions/youtube/.../swipecontrols/SwipeControlsHostActivity.kt` | In `dispatchTouchEvent`, short-circuit swipe controls while `CatLockOverlay.isLocked()` (swipe controls act at the Activity level, ahead of the overlay view, so brightness/volume swipes must be suppressed while locked). Import `CatLockOverlay`. |
+
+**Feature: NSFW mode (Reddit)** — an opt-in mode that reduces feed listings to their 18+ posts. Off until enabled in Morphe settings.
+
+| File | Change |
+|---|---|
+| `extensions/reddit/.../nsfw/NsfwPostDetector.java` | **New file.** Android-free core. Reflectively finds a zero-arg `boolean`/`Boolean` NSFW accessor on a feed item (`getOver18` first, after Reddit's own `over_18` JSON field, then fallbacks), else unwraps the item (`getLink`, `getPost`, ...) up to 2 levels. Reports `NSFW`/`SFW`/`UNKNOWN` and never guesses. Reflection is deliberate: compiling against one guessed model signature would throw `NoSuchMethodError` the moment Reddit reshapes the model. |
+| `extensions/reddit/.../patches/NsfwFeedModePatch.java` | **New file.** `filterListing(List)` injection point. Reads `Settings.NSFW_FEED_MODE` live (it is a mode, not a startup flag). Fails open when a listing yields zero classified items, so a model change leaves the feed unfiltered instead of empty. |
+| `extensions/reddit/src/test/.../nsfw/NsfwPostDetectorSelfTest.java` | **New file.** Plain-javac self-test; must print `35 passed, 0 failed`. |
+| `patches/.../reddit/layout/nsfw/Fingerprints.kt` | **New file.** `NsfwListingFingerprint`, a deliberate duplicate of `ad/ListingFingerprint` (`Lcom/reddit/domain/model/listing/Listing;-><init>`, matched on the `children`/`after`/`before` field writes). Must stay a **separate instance**: a `Fingerprint` caches its match, so sharing one with `Hide ads` would hand the second patch stale instruction indices. Keep it in sync with upstream's copy on every sync. |
+| `patches/.../reddit/layout/nsfw/NsfwFeedModePatch.kt` | **New file.** Inserts `filterListing` ahead of the `children` field write — the same anchor `Hide ads` uses, which is safe because the two fingerprints are separate instances and the filters chain in either order. |
+| `extensions/reddit/.../settings/Settings.java` | Add `NSFW_FEED_MODE = new BooleanSetting("morphe_nsfw_feed_mode", FALSE)` in its own `// NSFW mode` region. Two-arg constructor on purpose: no app restart needed. |
+| `extensions/reddit/.../preference/categories/NsfwPreferenceCategory.java` | **New file.** Mirrors `AdsPreferenceCategory`. |
+| `extensions/reddit/.../preference/RedditPreferenceFragment.java` | Construct `NsfwPreferenceCategory` after `AdsPreferenceCategory`, plus its import. |
+| `patches/src/main/resources/addresources/values/reddit/strings.xml` | Add `morphe_screen_nsfw_title` and `morphe_nsfw_feed_mode_{title,summary}`. Only the default `values/` locale — Crowdin fills the rest. |
+
+Known limitation to preserve on sync: the hook is the `Listing` model, so it covers listing-backed feeds (front page and subreddits) but not the section-backed Popular/Latest feeds, which `Hide ads` reaches through `AdPostSectionConstructorFingerprint` instead. Adding a section-level hook needs a decompiled Reddit APK to fingerprint against.
 
 **Fork infrastructure (not tied to a feature)**
 
@@ -86,7 +102,7 @@ patch no longer applies cleanly):
    the `.rej` hunks manually using the semantics table above (upstream may have refactored the touched
    files). **Regenerate `.fork/upstream-delta.patch`** against the new tree afterwards so the next sync
    starts clean.
-5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11).
+5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11, NsfwPostDetectorSelfTest 35/35).
 6. Update the state markers in this file. Commit everything as
    `bump: Sync upstream Morphe patches vX.Y.Z` (the `bump:` type produces a patch release), push to `dev`.
    If the push to `dev` is rejected with 403 / a branch restriction, see **Automation (routine) setup**
