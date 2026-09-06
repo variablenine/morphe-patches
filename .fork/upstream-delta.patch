@@ -85,6 +85,1029 @@ index 4319c24ed..428edff4f 100644
 +      # (and must not) have. They only ran on a published release, always failed
 +      # at the app-token step, and emailed the owner. Removed on purpose; keep them
 +      # out on every upstream sync (see .fork/SYNC.md).
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java
+new file mode 100644
+index 000000000..49aaeaa86
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java
+@@ -0,0 +1,304 @@
++package app.morphe.extension.reddit.nsfw;
++
++import java.lang.reflect.Method;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.ConcurrentHashMap;
++
++/**
++ * Pure, Android-free core of NSFW mode: decides whether a single feed item is an 18+ post.
++ *
++ * <p>Reddit's feed models are not part of any stable API, and the exact model class differs
++ * between feed types and app versions (a listing may hold {@code Link}, some {@code ILink}
++ * implementation, or a wrapper element that holds one of those). Rather than compiling against
++ * one guessed signature - which would throw {@link NoSuchMethodError} at runtime the moment
++ * Reddit renames or reshapes the model - this looks the accessor up reflectively and caches it
++ * per class:
++ *
++ * <ol>
++ *   <li>a zero-argument {@code boolean}/{@code Boolean} accessor named after Reddit's own
++ *       {@code over_18} JSON field ({@code getOver18()} and friends), else</li>
++ *   <li>a zero-argument accessor that unwraps a nested post model ({@code getLink()},
++ *       {@code getPost()}, ...), recursing at most {@link #MAX_WRAPPER_DEPTH} levels.</li>
++ * </ol>
++ *
++ * <p>Anything that cannot be classified is reported as {@link Rating#UNKNOWN} rather than
++ * guessed at, so callers can decide whether to fail open. That matters: silently classifying an
++ * unrecognised model as SFW would empty the whole feed instead of merely doing nothing.
++ */
++public final class NsfwPostDetector {
++
++    public enum Rating {
++        /** The item exposed an NSFW flag and it was set. */
++        NSFW,
++        /** The item exposed an NSFW flag and it was not set. */
++        SFW,
++        /** No usable NSFW flag was found on the item. */
++        UNKNOWN
++    }
++
++    /**
++     * Zero-argument boolean accessors that carry the 18+ flag, most likely first.
++     * {@code over18} mirrors the {@code over_18} field of Reddit's own JSON API, and is the
++     * name Reddit's Android models use elsewhere (such as {@code Subreddit.getOver18()}).
++     */
++    private static final String[] NSFW_ACCESSOR_NAMES = {
++            "getOver18",
++            "isOver18",
++            "getOver_18",
++            "isOver_18",
++            "isNsfw",
++            "getNsfw",
++            "getIsNsfw",
++            "isAdultContent",
++            "getAdultContent",
++    };
++
++    /**
++     * Zero-argument accessors that unwrap a feed element to the post model inside it.
++     */
++    private static final String[] WRAPPER_ACCESSOR_NAMES = {
++            "getLink",
++            "getPost",
++            "getPostModel",
++            "getLinkPresentationModel",
++            "getModel",
++            "getItem",
++            "getData",
++    };
++
++    /**
++     * How many times a feed item may be unwrapped while looking for the post inside it.
++     * Also bounds recursion when models reference each other in a cycle.
++     */
++    private static final int MAX_WRAPPER_DEPTH = 2;
++
++    /** Cache entry meaning "this class has no usable NSFW accessor". */
++    private static final Method NO_ACCESSOR = sentinelMethod();
++
++    private static final Method[] NO_WRAPPERS = new Method[0];
++
++    private static final Map<Class<?>, Method> NSFW_ACCESSORS = new ConcurrentHashMap<>();
++
++    private static final Map<Class<?>, Method[]> WRAPPER_ACCESSORS = new ConcurrentHashMap<>();
++
++    private NsfwPostDetector() {
++    }
++
++    /**
++     * @return The rating of a single feed item.
++     */
++    public static Rating classify(Object item) {
++        return classify(item, 0);
++    }
++
++    /**
++     * Keeps only the NSFW items of a feed listing.
++     *
++     * <p>The returned list is a fresh mutable list, because Reddit's own code may go on to
++     * mutate the listing it was handed.
++     */
++    public static FilterResult filterToNsfw(List<?> items) {
++        if (items == null || items.isEmpty()) {
++            return new FilterResult(new ArrayList<>(), 0, 0);
++        }
++
++        List<Object> nsfwItems = new ArrayList<>(items.size());
++        int classifiedCount = 0;
++
++        for (Object item : items) {
++            Rating rating = classify(item);
++            if (rating != Rating.UNKNOWN) {
++                classifiedCount++;
++            }
++            if (rating == Rating.NSFW) {
++                nsfwItems.add(item);
++            }
++        }
++
++        return new FilterResult(nsfwItems, classifiedCount, items.size() - nsfwItems.size());
++    }
++
++    /**
++     * @return The name of the accessor used for a class, or null if it has none.
++     *         Only used for logging and tests.
++     */
++    public static String nsfwAccessorNameFor(Class<?> type) {
++        Method accessor = nsfwAccessorFor(type);
++        return accessor == null ? null : accessor.getName();
++    }
++
++    /**
++     * Drops every cached lookup. Only used by tests.
++     */
++    public static void clearCaches() {
++        NSFW_ACCESSORS.clear();
++        WRAPPER_ACCESSORS.clear();
++    }
++
++    private static Rating classify(Object item, int depth) {
++        if (item == null) {
++            return Rating.UNKNOWN;
++        }
++
++        Class<?> type = item.getClass();
++
++        Method accessor = nsfwAccessorFor(type);
++        if (accessor != null) {
++            try {
++                Object value = accessor.invoke(item);
++                if (value instanceof Boolean) {
++                    return ((Boolean) value) ? Rating.NSFW : Rating.SFW;
++                }
++            } catch (Throwable ex) {
++                // Inaccessible or throwing model. Fall through and try to unwrap instead.
++            }
++        }
++
++        if (depth >= MAX_WRAPPER_DEPTH) {
++            return Rating.UNKNOWN;
++        }
++
++        for (Method wrapper : wrapperAccessorsFor(type)) {
++            Object inner;
++            try {
++                inner = wrapper.invoke(item);
++            } catch (Throwable ex) {
++                continue;
++            }
++
++            if (inner == null || inner == item) {
++                continue;
++            }
++
++            Rating rating = classify(inner, depth + 1);
++            if (rating != Rating.UNKNOWN) {
++                return rating;
++            }
++        }
++
++        return Rating.UNKNOWN;
++    }
++
++    private static Method nsfwAccessorFor(Class<?> type) {
++        Method cached = NSFW_ACCESSORS.get(type);
++        if (cached != null) {
++            return cached == NO_ACCESSOR ? null : cached;
++        }
++
++        Method found = null;
++        Method[] methods = publicMethodsOf(type);
++
++        // Iterate the candidate names in the outer loop, so the most likely name wins
++        // no matter what order the class happens to declare its methods in.
++        outer:
++        for (String name : NSFW_ACCESSOR_NAMES) {
++            for (Method method : methods) {
++                if (method.getParameterCount() != 0 || !name.equals(method.getName())) {
++                    continue;
++                }
++                Class<?> returnType = method.getReturnType();
++                if (returnType != boolean.class && returnType != Boolean.class) {
++                    continue;
++                }
++                found = makeAccessible(method);
++                break outer;
++            }
++        }
++
++        NSFW_ACCESSORS.put(type, found == null ? NO_ACCESSOR : found);
++        return found;
++    }
++
++    private static Method[] wrapperAccessorsFor(Class<?> type) {
++        Method[] cached = WRAPPER_ACCESSORS.get(type);
++        if (cached != null) {
++            return cached;
++        }
++
++        List<Method> found = new ArrayList<>(2);
++        Method[] methods = publicMethodsOf(type);
++
++        for (String name : WRAPPER_ACCESSOR_NAMES) {
++            for (Method method : methods) {
++                if (method.getParameterCount() != 0 || !name.equals(method.getName())) {
++                    continue;
++                }
++                Class<?> returnType = method.getReturnType();
++                if (returnType.isPrimitive() || returnType == void.class || returnType == String.class) {
++                    continue;
++                }
++                found.add(makeAccessible(method));
++            }
++        }
++
++        Method[] accessors = found.isEmpty() ? NO_WRAPPERS : found.toArray(new Method[0]);
++        WRAPPER_ACCESSORS.put(type, accessors);
++        return accessors;
++    }
++
++    private static Method[] publicMethodsOf(Class<?> type) {
++        try {
++            // Includes inherited and interface methods, which is where these accessors
++            // usually live once Reddit's models are split across interfaces.
++            return type.getMethods();
++        } catch (Throwable ex) {
++            return NO_WRAPPERS;
++        }
++    }
++
++    private static Method makeAccessible(Method method) {
++        try {
++            method.setAccessible(true);
++        } catch (Throwable ex) {
++            // Package private or otherwise restricted declaring class.
++            // The call may still succeed, so keep the method either way.
++        }
++        return method;
++    }
++
++    private static Method sentinelMethod() {
++        try {
++            return NsfwPostDetector.class.getDeclaredMethod("noAccessorSentinel");
++        } catch (NoSuchMethodException ex) {
++            throw new AssertionError(ex);
++        }
++    }
++
++    @SuppressWarnings("unused")
++    private static void noAccessorSentinel() {
++        // Never invoked. Exists only as a "no accessor found" marker,
++        // because ConcurrentHashMap cannot store null values.
++    }
++
++    /**
++     * Outcome of filtering one listing.
++     */
++    public static final class FilterResult {
++        /** The NSFW items, in their original order. Mutable. */
++        public final List<Object> nsfwItems;
++
++        /**
++         * How many items exposed a usable NSFW flag. Zero means the detector did not
++         * understand a single item of the listing, which callers should treat as a
++         * detector failure rather than as "this page has no NSFW posts".
++         */
++        public final int classifiedCount;
++
++        /** How many items were dropped. */
++        public final int removedCount;
++
++        FilterResult(List<Object> nsfwItems, int classifiedCount, int removedCount) {
++            this.nsfwItems = nsfwItems;
++            this.classifiedCount = classifiedCount;
++            this.removedCount = removedCount;
++        }
++
++        /** @return The NSFW items as an unmodifiable list. Only used by tests. */
++        public List<Object> unmodifiableItems() {
++            return Collections.unmodifiableList(nsfwItems);
++        }
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
+new file mode 100644
+index 000000000..6ba6b04fa
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
+@@ -0,0 +1,235 @@
++package app.morphe.extension.reddit.patches;
++
++import java.lang.reflect.Constructor;
++import java.lang.reflect.Field;
++import java.lang.reflect.Modifier;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.List;
++
++import app.morphe.extension.reddit.settings.Settings;
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.ResourceUtils;
++import app.morphe.extension.shared.Utils;
++
++/**
++ * Adds an "NSFW" row to the navigation drawer, directly under Reddit's own Popular row,
++ * and toggles NSFW mode when it is tapped.
++ *
++ * <p>The row is built by cloning the Popular row rather than by constructing one from a known
++ * class: the drawer row type is obfuscated and renamed every release, but its shape
++ * ({@code (boolean, int titleRes, int iconRes, long uniqueId)}) is stable, and the clone
++ * inherits whatever the real type happens to be. Everything here is reflective and wrapped, so
++ * a shape change costs the row, not the app.
++ *
++ * <p>The Popular row is identified by its title resource id, looked up by name at runtime, which
++ * also resolves which of the two int fields is the title and which is the icon: only the title
++ * can equal a string resource id.
++ *
++ * <p>Note on why this toggles a filter instead of opening a mature feed: Reddit's
++ * {@code FeedType} and {@code ListingType} both carry a MATURE entry, but the app ships no
++ * mature feed screen (every other feed has one - HomeFeedScreen, PopularFeedScreen,
++ * LatestFeedScreen, AllFeedScreen). MATURE survives only in exhaustive Kotlin branch tables,
++ * so there is nothing to navigate to.
++ */
++@SuppressWarnings("unused")
++public final class NsfwDrawerRow {
++
++    /** Reddit's own string resource naming its Popular drawer row. */
++    private static final String POPULAR_LABEL_KEY = "popular_feed_label";
++
++    /** The string resource Morphe adds for this row. */
++    private static final String NSFW_LABEL_KEY = "morphe_nsfw_feed_mode_row_title";
++
++    /**
++     * Stable adapter id for the added row. Deliberately far from Reddit's own ids, which count
++     * down from zero, so it cannot collide with one.
++     */
++    private static final long ROW_UNIQUE_ID = Long.MIN_VALUE + 0x4E53_5730L;
++
++    private static final int UNRESOLVED = -1;
++
++    private static volatile int popularTitleId = UNRESOLVED;
++    private static volatile int nsfwTitleId = UNRESOLVED;
++
++    /** Whether the diagnostic toast explaining the fallback has been shown this app start. */
++    private static volatile boolean explainedFallback;
++
++    private NsfwDrawerRow() {
++    }
++
++    /**
++     * @return If this patch was included during patching.
++     */
++    public static boolean isPatchIncluded() {
++        return false;  // Modified during patching.
++    }
++
++    /**
++     * Injection point. Appends the NSFW row to the drawer section that holds the Popular row.
++     *
++     * @param items One drawer section's items.
++     * @return The same items, with the NSFW row appended if this section was the Popular one.
++     */
++    public static Collection<?> addNsfwRow(Collection<?> items) {
++        try {
++            if (items == null || items.isEmpty()) {
++                return items;
++            }
++
++            int popularId = popularTitleId();
++            int nsfwId = nsfwTitleId();
++            if (popularId == 0 || nsfwId == 0) {
++                return items;
++            }
++
++            for (Object item : items) {
++                Object row = cloneAsNsfwRow(item, popularId, nsfwId);
++                if (row == null) {
++                    continue;
++                }
++
++                List<Object> augmented = new ArrayList<>(items.size() + 1);
++                augmented.addAll(items);
++                augmented.add(row);
++
++                Logger.printDebug(() -> "NSFW mode: added drawer row after Popular");
++                return augmented;
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "addNsfwRow failure", ex);
++        }
++
++        return items;
++    }
++
++    /**
++     * Injection point. Handles a tap on a drawer row.
++     *
++     * @param row The row that was tapped.
++     * @return Whether this was the NSFW row, and the tap has been handled.
++     */
++    public static boolean onDrawerRowClicked(Object row) {
++        try {
++            int nsfwId = nsfwTitleId();
++            if (row == null || nsfwId == 0 || !hasIntField(row, nsfwId)) {
++                return false;
++            }
++
++            boolean enabled = !Settings.NSFW_FEED_MODE.get();
++            Settings.NSFW_FEED_MODE.save(enabled);
++
++            if (enabled) {
++                Utils.showToastShort("NSFW mode ON - refresh the feed");
++                if (!explainedFallback) {
++                    explainedFallback = true;
++                    Utils.showToastLong("Filtering the feed to 18+ posts. "
++                            + "This app build has no mature feed to open");
++                }
++            } else {
++                Utils.showToastShort("NSFW mode OFF - refresh the feed");
++            }
++
++            return true;
++        } catch (Exception ex) {
++            Logger.printException(() -> "onDrawerRowClicked failure", ex);
++            return false;
++        }
++    }
++
++    /**
++     * Builds an NSFW row from Reddit's Popular row, or null if this item is not that row.
++     */
++    private static Object cloneAsNsfwRow(Object item, int popularId, int nsfwId) {
++        if (item == null) {
++            return null;
++        }
++
++        Class<?> type = item.getClass();
++
++        Constructor<?> constructor;
++        try {
++            constructor = type.getDeclaredConstructor(
++                    boolean.class, int.class, int.class, long.class);
++        } catch (NoSuchMethodException ex) {
++            // Not a simple drawer row.
++            return null;
++        }
++
++        int titleId = UNRESOLVED;
++        int iconId = UNRESOLVED;
++        boolean flag = false;
++
++        try {
++            for (Field field : type.getDeclaredFields()) {
++                if (Modifier.isStatic(field.getModifiers())) {
++                    continue;
++                }
++                field.setAccessible(true);
++
++                Class<?> fieldType = field.getType();
++                if (fieldType == int.class) {
++                    int value = field.getInt(item);
++                    // Only the title can be a string resource id, so this also tells the
++                    // two int fields apart without relying on their declaration order.
++                    if (value == popularId) {
++                        titleId = value;
++                    } else {
++                        iconId = value;
++                    }
++                } else if (fieldType == boolean.class) {
++                    flag = field.getBoolean(item);
++                }
++            }
++
++            if (titleId != popularId || iconId == UNRESOLVED) {
++                return null;
++            }
++
++            constructor.setAccessible(true);
++            return constructor.newInstance(flag, nsfwId, iconId, ROW_UNIQUE_ID);
++        } catch (Exception ex) {
++            Logger.printException(() -> "cloneAsNsfwRow failure", ex);
++            return null;
++        }
++    }
++
++    private static boolean hasIntField(Object row, int value) {
++        try {
++            for (Field field : row.getClass().getDeclaredFields()) {
++                if (Modifier.isStatic(field.getModifiers()) || field.getType() != int.class) {
++                    continue;
++                }
++                field.setAccessible(true);
++                if (field.getInt(row) == value) {
++                    return true;
++                }
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "hasIntField failure", ex);
++        }
++        return false;
++    }
++
++    private static int popularTitleId() {
++        int id = popularTitleId;
++        if (id == UNRESOLVED) {
++            id = ResourceUtils.getStringIdentifier(POPULAR_LABEL_KEY);
++            popularTitleId = id;
++            if (id == 0) {
++                Logger.printInfo(() -> "NSFW mode: no '" + POPULAR_LABEL_KEY
++                        + "' string, cannot place the drawer row");
++            }
++        }
++        return id;
++    }
++
++    private static int nsfwTitleId() {
++        int id = nsfwTitleId;
++        if (id == UNRESOLVED) {
++            id = ResourceUtils.getStringIdentifier(NSFW_LABEL_KEY);
++            nsfwTitleId = id;
++        }
++        return id;
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
+new file mode 100644
+index 000000000..2b3c2febb
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
+@@ -0,0 +1,118 @@
++package app.morphe.extension.reddit.patches;
++
++import java.util.List;
++
++import app.morphe.extension.reddit.nsfw.NsfwPostDetector;
++import app.morphe.extension.reddit.settings.Settings;
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.Utils;
++
++/**
++ * NSFW mode: while it is on, feed listings are reduced to their 18+ posts.
++ *
++ * <p>The setting is read on every call rather than cached in a static, because this is a mode
++ * the user turns on and off, and it must take effect on the next feed load instead of on the
++ * next app start.
++ *
++ * <p>Two limits are worth knowing about, and neither can be fixed on this side of the wire:
++ * <ul>
++ *   <li>This only removes posts. Reddit does not send 18+ posts to a feed at all unless the
++ *       account has "Show NSFW content (18+)" enabled, so with that account setting off the
++ *       filtered feed is simply empty.</li>
++ *   <li>A listing carries no identity, so this applies to every listing built this way, not to
++ *       the front page alone.</li>
++ * </ul>
++ */
++@SuppressWarnings("unused")
++public final class NsfwFeedModePatch {
++
++    /**
++     * Whether the "no item was understood" warning has already been logged.
++     * Only logged once, since this runs on every page of every feed.
++     */
++    private static volatile boolean loggedUnreadableListing;
++
++    /**
++     * Whether the one-off diagnostic toast has been shown this app start. Temporary: it exists
++     * to answer, on a real device, whether this listing hook is reached at all on a given Reddit
++     * version - something no amount of decompiling settles. Remove once that is known.
++     */
++    private static volatile boolean reportedFirstListing;
++
++    /**
++     * @return If this patch was included during patching.
++     */
++    public static boolean isPatchIncluded() {
++        return false;  // Modified during patching.
++    }
++
++    /**
++     * @return If NSFW mode is currently on.
++     */
++    public static boolean isNsfwModeEnabled() {
++        return Settings.NSFW_FEED_MODE.get();
++    }
++
++    /**
++     * Turns NSFW mode on or off. Exists so the mode can be driven from somewhere
++     * other than the settings screen.
++     */
++    public static void setNsfwModeEnabled(boolean enabled) {
++        Settings.NSFW_FEED_MODE.save(enabled);
++    }
++
++    /**
++     * Injection point. Filters the children of a feed listing.
++     *
++     * @param list The posts the listing was built with.
++     * @return Only the NSFW posts, or the unchanged list if NSFW mode is off
++     *         or the listing could not be read.
++     */
++    public static List<?> filterListing(List<?> list) {
++        try {
++            if (list == null || list.isEmpty() || !isNsfwModeEnabled()) {
++                return list;
++            }
++
++            NsfwPostDetector.FilterResult result = NsfwPostDetector.filterToNsfw(list);
++
++            if (result.classifiedCount == 0) {
++                // Not one item of this listing exposed an NSFW flag, which means the model
++                // changed rather than that the page happens to hold no 18+ posts. Fail open:
++                // showing the feed unfiltered is a far better failure than silently emptying it.
++                if (!loggedUnreadableListing) {
++                    loggedUnreadableListing = true;
++                    String model = describeFirstItem(list);
++                    Logger.printInfo(() -> "NSFW mode: no NSFW flag found on "
++                            + model + ", leaving listings unfiltered");
++                    Utils.showToastLong("NSFW mode: could not read " + model
++                            + ", feed left unfiltered");
++                }
++                return list;
++            }
++
++            Logger.printDebug(() -> "NSFW mode: kept " + result.nsfwItems.size()
++                    + " of " + list.size() + " posts");
++
++            if (!reportedFirstListing) {
++                reportedFirstListing = true;
++                Utils.showToastShort("NSFW mode: kept " + result.nsfwItems.size()
++                        + " of " + list.size() + " posts");
++            }
++
++            return result.nsfwItems;
++        } catch (Exception ex) {
++            Logger.printException(() -> "filterListing failure", ex);
++            return list;
++        }
++    }
++
++    private static String describeFirstItem(List<?> list) {
++        for (Object item : list) {
++            if (item != null) {
++                return item.getClass().getName();
++            }
++        }
++        return "an empty listing";
++    }
++}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
+index 892166b32..c473bce9d 100644
+--- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
+@@ -45,6 +45,9 @@ public class Settings extends BaseSettings {
+     public static final BooleanSetting REMOVE_NOTIFICATION_DIALOG = new BooleanSetting("morphe_remove_notification_dialog", FALSE, true);
+     public static final BooleanSetting SHOW_VIEW_COUNT = new BooleanSetting("morphe_show_view_count", FALSE, true);
+ 
++    // NSFW mode
++    public static final BooleanSetting NSFW_FEED_MODE = new BooleanSetting("morphe_nsfw_feed_mode", FALSE);
++
+     // Miscellaneous
+     public static final BooleanSetting OPEN_LINKS_DIRECTLY = new BooleanSetting("morphe_open_links_directly", TRUE);
+     public static final BooleanSetting OPEN_LINKS_EXTERNALLY = new BooleanSetting("morphe_open_links_externally", TRUE);
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java
+index 353379736..d765f679a 100644
+--- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java
+@@ -18,6 +18,7 @@ import app.morphe.extension.reddit.settings.preference.categories.AdsPreferenceC
+ import app.morphe.extension.reddit.settings.preference.categories.LayoutPreferenceCategory;
+ import app.morphe.extension.reddit.settings.preference.categories.MiscellaneousPreferenceCategory;
+ import app.morphe.extension.reddit.settings.preference.categories.NavigationBarPreferenceCategory;
++import app.morphe.extension.reddit.settings.preference.categories.NsfwPreferenceCategory;
+ import app.morphe.extension.reddit.settings.preference.categories.SidebarPreferenceCategory;
+ import app.morphe.extension.shared.ResourceUtils;
+ import app.morphe.extension.shared.settings.BaseSettings;
+@@ -43,6 +44,7 @@ public class RedditPreferenceFragment extends AbstractPreferenceFragment {
+ 
+         // Custom categories reference app specific Settings class.
+         new AdsPreferenceCategory(context, preferenceScreen);
++        new NsfwPreferenceCategory(context, preferenceScreen);
+         new NavigationBarPreferenceCategory(context, preferenceScreen);
+         new SidebarPreferenceCategory(context, preferenceScreen);
+         new LayoutPreferenceCategory(context, preferenceScreen);
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/categories/NsfwPreferenceCategory.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/categories/NsfwPreferenceCategory.java
+new file mode 100644
+index 000000000..c55d82c82
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/categories/NsfwPreferenceCategory.java
+@@ -0,0 +1,31 @@
++package app.morphe.extension.reddit.settings.preference.categories;
++
++import static app.morphe.extension.shared.StringRef.str;
++
++import android.content.Context;
++import android.preference.PreferenceScreen;
++
++import app.morphe.extension.reddit.patches.NsfwFeedModePatch;
++import app.morphe.extension.reddit.settings.Settings;
++import app.morphe.extension.reddit.settings.preference.BooleanSettingPreference;
++
++@SuppressWarnings("deprecation")
++public class NsfwPreferenceCategory extends ConditionalPreferenceCategory {
++    public NsfwPreferenceCategory(Context context, PreferenceScreen screen) {
++        super(context, screen);
++        setTitle(str("morphe_screen_nsfw_title"));
++    }
++
++    @Override
++    public boolean getSettingsStatus() {
++        return NsfwFeedModePatch.isPatchIncluded();
++    }
++
++    @Override
++    public void addPreferences(Context context) {
++        addPreference(new BooleanSettingPreference(
++                context,
++                Settings.NSFW_FEED_MODE
++        ));
++    }
++}
+diff --git a/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java
+new file mode 100644
+index 000000000..0b6ffc6d0
+--- /dev/null
++++ b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java
+@@ -0,0 +1,271 @@
++package app.morphe.extension.reddit.nsfw;
++
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import app.morphe.extension.reddit.nsfw.NsfwPostDetector.FilterResult;
++import app.morphe.extension.reddit.nsfw.NsfwPostDetector.Rating;
++
++/**
++ * Dependency-free self-test for {@link NsfwPostDetector}. Runs with a plain JDK:
++ *
++ * <pre>
++ *   cd extensions/reddit/src
++ *   javac main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java -d /tmp/nsfw
++ *   javac -cp /tmp/nsfw test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java -d /tmp/nsfw
++ *   java  -cp /tmp/nsfw app.morphe.extension.reddit.nsfw.NsfwPostDetectorSelfTest
++ * </pre>
++ *
++ * <p>The fakes below stand in for Reddit's feed models: the detector only ever sees them
++ * through reflection, so exercising it against local classes exercises the real code path.
++ */
++public final class NsfwPostDetectorSelfTest {
++    private static int pass = 0, fail = 0;
++
++    private static void check(boolean cond, String name) {
++        if (cond) pass++; else fail++;
++        System.out.printf("%s  %s%n", cond ? "PASS" : "FAIL", name);
++    }
++
++    // --- fakes -------------------------------------------------------------------------
++
++    /** Reddit's own shape: a primitive over18 flag named after the over_18 JSON field. */
++    public static final class PrimitiveLink {
++        private final boolean over18;
++
++        public PrimitiveLink(boolean over18) {
++            this.over18 = over18;
++        }
++
++        public boolean getOver18() {
++            return over18;
++        }
++    }
++
++    /** Boxed flag, as a nullable Kotlin Boolean? compiles to. */
++    public static final class BoxedLink {
++        private final Boolean over18;
++
++        public BoxedLink(Boolean over18) {
++            this.over18 = over18;
++        }
++
++        public Boolean getOver18() {
++            return over18;
++        }
++    }
++
++    /** A renamed flag, to prove the fallback names are used. */
++    public static final class RenamedLink {
++        public boolean isNsfw() {
++            return true;
++        }
++    }
++
++    /** Both names present: the higher priority one must win. */
++    public static final class AmbiguousLink {
++        public boolean getOver18() {
++            return true;
++        }
++
++        public boolean isNsfw() {
++            return false;
++        }
++    }
++
++    /** Nothing usable at all. */
++    public static final class OpaqueElement {
++        public String getTitle() {
++            return "announcement";
++        }
++    }
++
++    /** Right name, wrong type. */
++    public static final class WrongTypeLink {
++        public String getOver18() {
++            return "true";
++        }
++    }
++
++    /** Right name and type, but takes an argument. */
++    public static final class ArgumentLink {
++        public boolean getOver18(int unused) {
++            return true;
++        }
++    }
++
++    /** A feed element that wraps the real post. */
++    public static final class WrapperElement {
++        private final Object link;
++
++        public WrapperElement(Object link) {
++            this.link = link;
++        }
++
++        public Object getLink() {
++            return link;
++        }
++    }
++
++    /** A second wrapper layer, using a different accessor name. */
++    public static final class OuterElement {
++        private final Object item;
++
++        public OuterElement(Object item) {
++            this.item = item;
++        }
++
++        public Object getItem() {
++            return item;
++        }
++    }
++
++    /** Its accessor blows up, but the post is reachable by unwrapping. */
++    public static final class ThrowingLink {
++        private final Object link;
++
++        public ThrowingLink(Object link) {
++            this.link = link;
++        }
++
++        public boolean getOver18() {
++            throw new IllegalStateException("model not initialised");
++        }
++
++        public Object getLink() {
++            return link;
++        }
++    }
++
++    /** Returns itself, which must not recurse forever. */
++    public static final class SelfReferencingElement {
++        public Object getLink() {
++            return this;
++        }
++    }
++
++    /** A wrapper accessor returning a String must not be followed. */
++    public static final class StringWrapperElement {
++        public String getData() {
++            return "getOver18";
++        }
++    }
++
++    // --- tests -------------------------------------------------------------------------
++
++    public static void main(String[] args) {
++        NsfwPostDetector.clearCaches();
++
++        // --- direct flags ---
++        check(NsfwPostDetector.classify(new PrimitiveLink(true)) == Rating.NSFW,
++                "primitive getOver18() == true is NSFW");
++        check(NsfwPostDetector.classify(new PrimitiveLink(false)) == Rating.SFW,
++                "primitive getOver18() == false is SFW");
++        check(NsfwPostDetector.classify(new BoxedLink(Boolean.TRUE)) == Rating.NSFW,
++                "boxed getOver18() == TRUE is NSFW");
++        check(NsfwPostDetector.classify(new BoxedLink(Boolean.FALSE)) == Rating.SFW,
++                "boxed getOver18() == FALSE is SFW");
++        check(NsfwPostDetector.classify(new BoxedLink(null)) == Rating.UNKNOWN,
++                "boxed getOver18() == null is UNKNOWN, not SFW");
++        check(NsfwPostDetector.classify(new RenamedLink()) == Rating.NSFW,
++                "fallback accessor name isNsfw() is used");
++        check(NsfwPostDetector.classify(new AmbiguousLink()) == Rating.NSFW,
++                "getOver18() takes priority over isNsfw()");
++
++        // --- nothing to read ---
++        check(NsfwPostDetector.classify(null) == Rating.UNKNOWN,
++                "null item is UNKNOWN");
++        check(NsfwPostDetector.classify(new OpaqueElement()) == Rating.UNKNOWN,
++                "model without any NSFW flag is UNKNOWN");
++        check(NsfwPostDetector.classify(new WrongTypeLink()) == Rating.UNKNOWN,
++                "non boolean getOver18() is ignored");
++        check(NsfwPostDetector.classify(new ArgumentLink()) == Rating.UNKNOWN,
++                "getOver18(int) is ignored");
++        check(NsfwPostDetector.classify("just a string") == Rating.UNKNOWN,
++                "unrelated object is UNKNOWN");
++
++        // --- unwrapping ---
++        check(NsfwPostDetector.classify(new WrapperElement(new PrimitiveLink(true))) == Rating.NSFW,
++                "wrapped NSFW post is found one level down");
++        check(NsfwPostDetector.classify(new WrapperElement(new PrimitiveLink(false))) == Rating.SFW,
++                "wrapped SFW post is found one level down");
++        check(NsfwPostDetector.classify(
++                        new OuterElement(new WrapperElement(new PrimitiveLink(true)))) == Rating.NSFW,
++                "wrapped NSFW post is found two levels down");
++        check(NsfwPostDetector.classify(new OuterElement(
++                        new OuterElement(new WrapperElement(new PrimitiveLink(true))))) == Rating.UNKNOWN,
++                "unwrapping stops after the depth limit");
++        check(NsfwPostDetector.classify(new WrapperElement(new OpaqueElement())) == Rating.UNKNOWN,
++                "wrapper around an unreadable post is UNKNOWN");
++        check(NsfwPostDetector.classify(new WrapperElement(null)) == Rating.UNKNOWN,
++                "wrapper around null is UNKNOWN");
++        check(NsfwPostDetector.classify(new StringWrapperElement()) == Rating.UNKNOWN,
++                "a String returning wrapper accessor is not followed");
++
++        // --- hostile models ---
++        check(NsfwPostDetector.classify(new ThrowingLink(new PrimitiveLink(true))) == Rating.NSFW,
++                "a throwing accessor falls back to unwrapping");
++        check(NsfwPostDetector.classify(new ThrowingLink(null)) == Rating.UNKNOWN,
++                "a throwing accessor with nothing to unwrap is UNKNOWN");
++        check(NsfwPostDetector.classify(new SelfReferencingElement()) == Rating.UNKNOWN,
++                "a self referencing wrapper terminates");
++
++        // --- accessor reporting ---
++        check("getOver18".equals(NsfwPostDetector.nsfwAccessorNameFor(PrimitiveLink.class)),
++                "accessor name is reported for a readable model");
++        check(NsfwPostDetector.nsfwAccessorNameFor(OpaqueElement.class) == null,
++                "no accessor name is reported for an unreadable model");
++
++        // --- listing filter ---
++        List<Object> mixed = Arrays.asList(
++                new PrimitiveLink(false),
++                new PrimitiveLink(true),
++                new OpaqueElement(),
++                new BoxedLink(Boolean.TRUE),
++                new PrimitiveLink(false));
++        FilterResult mixedResult = NsfwPostDetector.filterToNsfw(mixed);
++        check(mixedResult.nsfwItems.size() == 2,
++                "only NSFW items are kept");
++        check(mixedResult.nsfwItems.get(0) == mixed.get(1) && mixedResult.nsfwItems.get(1) == mixed.get(3),
++                "kept items stay in their original order");
++        check(mixedResult.classifiedCount == 4,
++                "classified count counts NSFW and SFW but not UNKNOWN");
++        check(mixedResult.removedCount == 3,
++                "removed count is the number of dropped items");
++
++        FilterResult unreadable = NsfwPostDetector.filterToNsfw(
++                Arrays.asList(new OpaqueElement(), new OpaqueElement()));
++        check(unreadable.classifiedCount == 0 && unreadable.nsfwItems.isEmpty(),
++                "a wholly unreadable listing reports zero classified, so callers can fail open");
++
++        FilterResult allSfw = NsfwPostDetector.filterToNsfw(
++                Arrays.asList(new PrimitiveLink(false), new PrimitiveLink(false)));
++        check(allSfw.classifiedCount == 2 && allSfw.nsfwItems.isEmpty(),
++                "an all SFW listing is distinguishable from an unreadable one");
++
++        check(NsfwPostDetector.filterToNsfw(null).nsfwItems.isEmpty(),
++                "null listing yields an empty result");
++        check(NsfwPostDetector.filterToNsfw(new ArrayList<>()).nsfwItems.isEmpty(),
++                "empty listing yields an empty result");
++
++        List<Object> withNulls = Arrays.asList(null, new PrimitiveLink(true), null);
++        FilterResult nullResult = NsfwPostDetector.filterToNsfw(withNulls);
++        check(nullResult.nsfwItems.size() == 1 && nullResult.classifiedCount == 1,
++                "null entries are dropped and not counted as classified");
++
++        List<?> source = Arrays.asList(new PrimitiveLink(true));
++        List<Object> filtered = NsfwPostDetector.filterToNsfw(source).nsfwItems;
++        filtered.add(new PrimitiveLink(true));
++        check(filtered.size() == 2 && source.size() == 1,
++                "the filtered listing is a fresh mutable list");
++
++        // --- caching ---
++        check(NsfwPostDetector.classify(new PrimitiveLink(true)) == Rating.NSFW
++                        && NsfwPostDetector.classify(new PrimitiveLink(false)) == Rating.SFW,
++                "cached accessors still classify correctly on repeat calls");
++
++        System.out.printf("%nRESULT: %d passed, %d failed%n", pass, fail);
++        if (fail > 0) System.exit(1);
++    }
++}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
 new file mode 100644
 index 000000000..b82ffb0a8
@@ -1031,6 +2054,246 @@ index 63fc58ee8..8352f4b9d 100644
          license = "GNU General Public License v3.0, with additional GPL section 7 requirements"
      }
  }
+diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
+new file mode 100644
+index 000000000..33b7faf2b
+--- /dev/null
++++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
+@@ -0,0 +1,123 @@
++package app.morphe.patches.reddit.layout.nsfw
++
++import app.morphe.patcher.Fingerprint
++import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
++import app.morphe.patcher.fieldAccess
++import app.morphe.patcher.methodCall
++import app.morphe.patcher.newInstance
++import app.morphe.patcher.opcode
++import app.morphe.patcher.parametersMatch
++import com.android.tools.smali.dexlib2.AccessFlags
++import com.android.tools.smali.dexlib2.Opcode
++
++/**
++ * The constructor of the model a feed page is deserialized into, matched on the writes of its
++ * own fields. The first match is the write of the post list, which is what NSFW mode filters.
++ *
++ * This deliberately does not reuse the identical fingerprint of the 'Hide ads' patch: a
++ * [Fingerprint] caches its match, so a shared instance would hand the second patch to run
++ * instruction indices that the first patch had already shifted. Two separate instances each
++ * match the method as it stands when their own patch executes, so the two filters chain
++ * safely no matter which order the patches are applied in.
++ */
++internal object NsfwListingFingerprint : Fingerprint(
++    definingClass = "Lcom/reddit/domain/model/listing/Listing;",
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.CONSTRUCTOR),
++    filters = listOf(
++        fieldAccess(
++            opcode = Opcode.IPUT_OBJECT,
++            smali = "Lcom/reddit/domain/model/listing/Listing;->children:Ljava/util/List;"
++        ),
++        fieldAccess(
++            opcode = Opcode.IPUT_OBJECT,
++            smali = "Lcom/reddit/domain/model/listing/Listing;->after:Ljava/lang/String;"
++        ),
++        fieldAccess(
++            opcode = Opcode.IPUT_OBJECT,
++            smali = "Lcom/reddit/domain/model/listing/Listing;->before:Ljava/lang/String;"
++        )
++    )
++)
++
++/**
++ * The static helper that turns one drawer section into rows. Deliberately a separate instance
++ * from the identical fingerprint in the 'Hide sidebar components' patch, for the same reason
++ * [NsfwListingFingerprint] is separate from the ads one: a shared instance would hand the second
++ * patch to run indices the first had already shifted. Both inject at the head of this method and
++ * chain in either order, one dropping sections and the other appending a row.
++ */
++private object DrawerSectionBuilderParentFingerprint : Fingerprint(
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
++    returnType = $$"Lcom/reddit/navdrawer/analytics/CommunityDrawerAnalytics$Section;",
++    parameters = listOf("Lcom/reddit/screens/drawer/community/HeaderItem;"),
++    filters = listOf(
++        methodCall("Ljava/lang/Enum;->ordinal()I"),
++        fieldAccess(
++            $$"Lcom/reddit/navdrawer/analytics/CommunityDrawerAnalytics$Section;->" +
++                    $$"ABOUT:Lcom/reddit/navdrawer/analytics/CommunityDrawerAnalytics$Section;"
++        )
++    )
++)
++
++internal object NsfwDrawerSectionFingerprint : Fingerprint(
++    classFingerprint = DrawerSectionBuilderParentFingerprint,
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
++    returnType = "V",
++    filters = listOf(
++        methodCall("Ljava/util/Collection;->isEmpty()Z"),
++    ),
++    custom = { method, _ ->
++        parametersMatch(
++            method.parameters,
++            listOf(
++                "L",
++                "Ljava/util/List;",
++                "Ljava/util/Collection;",
++                "L",
++                "L",
++                "Z",
++                "I"
++            )
++        ) || parametersMatch( // 2026.12.0+
++            method.parameters,
++            listOf(
++                "Ljava/util/List;",
++                "Ljava/util/Collection;",
++                "L",
++                "L",
++                "Z",
++                "I"
++            )
++        )
++    }
++)
++
++/**
++ * The drawer's click router. Reddit renamed the enclosing class and method, but kept the name of
++ * the lambda class this method instantiates, which makes a stable anchor.
++ *
++ * The tapped row is not a parameter: it is looked up from a map and cast, so the match walks to
++ * that cast and the patch reads the row from the register it lands in.
++ */
++internal object NsfwDrawerItemClickFingerprint : Fingerprint(
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
++    returnType = "V",
++    filters = listOf(
++        methodCall(
++            name = "get",
++            parameters = listOf("Ljava/lang/Object;"),
++            returnType = "Ljava/lang/Object;"
++        ),
++        opcode(
++            Opcode.MOVE_RESULT_OBJECT,
++            location = MatchAfterImmediately()
++        ),
++        opcode(
++            Opcode.CHECK_CAST,
++            location = MatchAfterImmediately()
++        ),
++        newInstance(
++            type = $$"Lcom/reddit/screens/drawer/community/CommunityDrawerPresenter$handleGenericItemClicked$1;"
++        )
++    )
++)
+diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
+new file mode 100644
+index 000000000..a7d8898d2
+--- /dev/null
++++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
+@@ -0,0 +1,105 @@
++package app.morphe.patches.reddit.layout.nsfw
++
++import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
++import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
++import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
++import app.morphe.patcher.patch.bytecodePatch
++import app.morphe.patches.reddit.misc.settings.settingsPatch
++import app.morphe.patches.reddit.shared.Constants.COMPATIBILITY_REDDIT
++import app.morphe.util.findFreeRegister
++import app.morphe.util.setExtensionIsPatchIncluded
++import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
++import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
++import java.util.logging.Logger
++
++private const val EXTENSION_CLASS =
++    "Lapp/morphe/extension/reddit/patches/NsfwFeedModePatch;"
++
++private const val DRAWER_EXTENSION_CLASS =
++    "Lapp/morphe/extension/reddit/patches/NsfwDrawerRow;"
++
++@Suppress("unused")
++val nsfwFeedModePatch = bytecodePatch(
++    name = "NSFW mode",
++    description = "Adds an option that hides everything except NSFW (18+) posts from the feed. " +
++            "Turned off until it is enabled in Morphe settings. " +
++            "Reddit only sends 18+ posts to accounts that have 'Show NSFW content' enabled, " +
++            "so the feed is empty without that account setting."
++) {
++    compatibleWith(COMPATIBILITY_REDDIT)
++
++    dependsOn(settingsPatch)
++
++    execute {
++        // Filter the posts where the feed page is built, which is the same place
++        // 'Hide ads' removes promoted posts from. Both patches insert ahead of the
++        // same field write, and chain in whichever order they are applied.
++        NsfwListingFingerprint.let {
++            it.method.apply {
++                val index = it.instructionMatches.first().index
++                val register = getInstruction<TwoRegisterInstruction>(index).registerA
++
++                addInstructions(
++                    index,
++                    """
++                        invoke-static { v$register }, $EXTENSION_CLASS->filterListing(Ljava/util/List;)Ljava/util/List;
++                        move-result-object v$register
++                    """
++                )
++            }
++        }
++
++        setExtensionIsPatchIncluded(EXTENSION_CLASS)
++
++        // region Navigation drawer row
++
++        // Best effort. The drawer is a far more volatile surface than the listing model, so a
++        // miss here costs the row and leaves the filter and its settings toggle working, rather
++        // than failing the whole patch and leaving the user unable to build at all.
++        try {
++            // Resolve the click router first and inject it first: a row that cannot respond to
++            // taps is worse than no row, so the two hooks go in together or not at all.
++            NsfwDrawerItemClickFingerprint.let {
++                it.method.apply {
++                    // The tapped row lands in the register of the cast that follows the lookup.
++                    val castIndex = it.instructionMatches[2].index
++                    val rowRegister = getInstruction<OneRegisterInstruction>(castIndex).registerA
++                    val free = findFreeRegister(castIndex, rowRegister)
++
++                    addInstructionsWithLabels(
++                        castIndex + 1,
++                        """
++                            invoke-static { v$rowRegister }, $DRAWER_EXTENSION_CLASS->onDrawerRowClicked(Ljava/lang/Object;)Z
++                            move-result v$free
++                            if-eqz v$free, :not_handled
++                            return-void
++                            :not_handled
++                            nop
++                        """
++                    )
++                }
++            }
++
++            NsfwDrawerSectionFingerprint.method.apply {
++                val collectionParameter = parameterTypes.indexOf("Ljava/util/Collection;")
++
++                addInstructions(
++                    0,
++                    """
++                        invoke-static/range { p$collectionParameter .. p$collectionParameter }, $DRAWER_EXTENSION_CLASS->addNsfwRow(Ljava/util/Collection;)Ljava/util/Collection;
++                        move-result-object p$collectionParameter
++                    """
++                )
++            }
++
++            setExtensionIsPatchIncluded(DRAWER_EXTENSION_CLASS)
++        } catch (ex: Exception) {
++            Logger.getLogger(this::class.java.name).warning(
++                "'NSFW mode' could not add its navigation drawer row: ${ex.message}. " +
++                        "Feed filtering and the Morphe settings toggle are unaffected."
++            )
++        }
++
++        // endregion
++    }
++}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
 new file mode 100644
 index 000000000..9810429fc
@@ -1132,6 +2395,24 @@ index 81aca9209..d4fcfea21 100644
          addLithoFilter(KEYWORD_FILTER)
          addLithoFilter(AISLIST_FILTER)
          addLithoFilter(CUSTOM_FILTER)
+diff --git a/patches/src/main/resources/addresources/values/reddit/strings.xml b/patches/src/main/resources/addresources/values/reddit/strings.xml
+index a4924a0d5..8f85ca172 100644
+--- a/patches/src/main/resources/addresources/values/reddit/strings.xml
++++ b/patches/src/main/resources/addresources/values/reddit/strings.xml
+@@ -22,6 +22,13 @@ Second \"item\" text"</string>
+     <string name="morphe_hide_post_ads_title">Hide feed ads</string>
+     <string name="morphe_hide_comment_ads_title">Hide comment ads</string>
+ 
++    <string name="morphe_screen_nsfw_title">NSFW mode</string>
++    <string name="morphe_nsfw_feed_mode_title">NSFW mode</string>
++    <string name="morphe_nsfw_feed_mode_row_title">NSFW</string>
++    <string name="morphe_nsfw_feed_mode_summary">"Hides everything except NSFW (18+) posts from the feed.
++
++Reddit only sends 18+ posts to accounts that have 'Show NSFW content' turned on, so the feed will be empty without that account setting"</string>
++
+     <string name="morphe_screen_navigation_bar_title">Navigation bar</string>
+     <string name="morphe_hide_answers_button_title">Hide Answers button</string>
+     <string name="morphe_hide_chat_button_title">Hide Chat button</string>
 diff --git a/patches/src/main/resources/addresources/values/youtube/strings.xml b/patches/src/main/resources/addresources/values/youtube/strings.xml
 index 30b99f785..617ec14e6 100644
 --- a/patches/src/main/resources/addresources/values/youtube/strings.xml
