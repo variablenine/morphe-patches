@@ -61,10 +61,20 @@ patch no longer applies cleanly):
 | `extensions/reddit/src/test/.../nsfw/DrawerRowClonerSelfTest.java` | **New file.** Plain-javac self-test; must print `19 passed, 0 failed`. Covers reordered fields, reordered constructor parameters, extra and null reference fields, single-int rows, and refusals. |
 | `extensions/reddit/.../patches/NsfwDrawerRow.java` | **New file.** Adds an NSFW row to the navigation drawer under Reddit's Popular row; a tap toggles NSFW mode, shows one short toast and asks `NsfwFeedRefresher` to reload the home feed. Builds the row by **cloning** the Popular row reflectively — the row type is obfuscated and renamed every release, but its shape `(boolean, int titleRes, int iconRes, long uniqueId)` is stable — and identifies Popular by looking up the `popular_feed_label` string id at runtime, which also disambiguates the title int from the icon int. All reflective and wrapped: a shape change costs the row, not the app. |
 | `patches/src/main/resources/addresources/values/reddit/strings.xml` | Add `morphe_screen_nsfw_title`, `morphe_nsfw_feed_mode_{title,summary}` and `morphe_nsfw_feed_mode_row_title`. Only the default `values/` locale — Crowdin fills the rest. |
+| `extensions/reddit/.../patches/NsfwModeIcon.java` | **New file.** `brandIcon(int)` injection point: returns the 18+ mark while the mode is on and Reddit's own otherwise. Resolves `morphe_nsfw_mode_icon` lazily (a static initialiser runs before resources exist) and caches it; an unresolved id leaves Reddit's mark alone, since an app bar with no icon looks broken. |
+| `patches/src/main/resources/nsfwmode/drawable/morphe_nsfw_mode_icon.xml` | **New file.** Copied into `res/drawable` by the patch's own `resourcePatch`. `#ff585b` is Reddit's own NSFW colour — the value of `alienblue_nsfw`, `midnight_nsfw`, `night_nsfw` and every other themed variant. |
 
 The drawer hooks live in the same patch but are wrapped in `try`/`catch`: the drawer is far more
 volatile than the listing model, so a fingerprint miss costs the row and leaves feed filtering and
 the settings toggle working, instead of failing the patch and leaving the user unable to build.
+The home app bar's brand mark is Compose, not a view: it is a single `painterResource` call on
+`icon_brand_full_color` inside
+`com.reddit.feedslegacy.switcher.impl.homepager.compose.composables.revamp.rplcustom`, so
+`NsfwHomeAppBarBrandIconFingerprint` anchors on that package plus the drawable resolved **by
+name** (`resourceLiteral`, which needs `resourceMappingPatch`), and the swap is one integer
+rewritten in place. Because it is Compose, the icon changes on the next composition of the home
+screen rather than the instant the mode is switched.
+
 `NsfwDrawerSectionFingerprint` is (again deliberately) a separate instance of the same fingerprint
 `hideSidebarComponentsPatch` uses; `NsfwDrawerItemClickFingerprint` anchors on the unobfuscated
 lambda class `CommunityDrawerPresenter$handleGenericItemClicked$1`.
