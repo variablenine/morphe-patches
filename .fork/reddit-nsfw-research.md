@@ -343,6 +343,15 @@ rather than dropped. Filtering in place also keeps the two values the builder re
 response - `f50Var.b.a`, the pagination cursor, and `f50Var.a`, the dist - exactly as they
 arrived.
 
+### The other two hooks were removed
+
+`Listing.<init>` and `RedditListingFeedElementMapper.getFeedElements` were both hooked while the
+home feed path was still being found. Neither reaches it, and both are wider than this mode:
+`Listing` is the cache path shared by every screen that reads a listing - subreddits, saved
+posts, search, profiles - so filtering it can empty a screen that has nothing to do with NSFW
+mode, and the element mapper serves the History feed. They are gone, and should not come back:
+the home page builder is the whole hook.
+
 ### A page must never come back empty
 
 `d.a` returns `new lk1.b(elements, cursor, ...)`. Hand it a page whose element list is empty and
