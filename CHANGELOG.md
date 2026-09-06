@@ -1,3 +1,9 @@
+## [1.2.3](https://github.com/variablenine/morphe-patches/compare/v1.2.2...v1.2.3) (2026-09-06)
+
+### 🐛 Bug Fixes
+
+* Use range invokes so the feed and click hooks can encode ([4c09875](https://github.com/variablenine/morphe-patches/commit/4c098752d0d181c18a5dc3c41e866d2bf305318b))
+
 ## [1.2.2](https://github.com/variablenine/morphe-patches/compare/v1.2.1...v1.2.2) (2026-09-06)
 
 ### 🐛 Bug Fixes

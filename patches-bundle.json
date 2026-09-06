@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-09-06T18:52:06",
-  "description": "## [1.2.2](https://github.com/variablenine/morphe-patches/compare/v1.2.1...v1.2.2) (2026-09-06)\n\n### 🐛 Bug Fixes\n\n* Filter the feed where posts actually reach the screen ([bc68072](https://github.com/variablenine/morphe-patches/commit/bc680722f63f853ad41107140d9a7581aab045c3))",
-  "download_url": "https://github.com/variablenine/morphe-patches/releases/download/v1.2.2/patches-1.2.2.mpp",
+  "created_at": "2026-09-06T20:32:22",
+  "description": "## [1.2.3](https://github.com/variablenine/morphe-patches/compare/v1.2.2...v1.2.3) (2026-09-06)\n\n### 🐛 Bug Fixes\n\n* Use range invokes so the feed and click hooks can encode ([4c09875](https://github.com/variablenine/morphe-patches/commit/4c098752d0d181c18a5dc3c41e866d2bf305318b))",
+  "download_url": "https://github.com/variablenine/morphe-patches/releases/download/v1.2.3/patches-1.2.3.mpp",
   "signature_download_url": "",
-  "version": "1.2.2"
+  "version": "1.2.3"
 }
