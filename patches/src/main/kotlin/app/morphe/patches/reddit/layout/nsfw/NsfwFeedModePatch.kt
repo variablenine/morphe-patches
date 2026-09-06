@@ -51,35 +51,38 @@ val nsfwFeedModePatch = bytecodePatch(
 
         setExtensionIsPatchIncluded(EXTENSION_CLASS)
 
+        // region Modern feed
+
+        // The listing hook above is the cache path: on device it filters a listing to nothing
+        // while the rendered feed carries on unchanged. Posts reach the screen through this
+        // mapper, so this is the hook that actually filters what is on screen.
+        try {
+            NsfwFeedElementMapperFingerprint.method.apply {
+                val listParameter = parameterTypes.indexOfFirst { it == "Ljava/util/List;" }
+                // Instance method, so parameter n is register p(n + 1).
+                val register = "p${listParameter + 1}"
+
+                addInstructions(
+                    0,
+                    """
+                        invoke-static { $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
+                        move-result-object $register
+                    """
+                )
+            }
+        } catch (ex: Exception) {
+            Logger.getLogger(this::class.java.name).warning(
+                "'NSFW mode' could not hook the feed element mapper: ${ex.message}"
+            )
+        }
+
+        // endregion
+
         // region Navigation drawer row
 
-        // Best effort. The drawer is a far more volatile surface than the listing model, so a
-        // miss here costs the row and leaves the filter and its settings toggle working, rather
-        // than failing the whole patch and leaving the user unable to build at all.
+        // Best effort, and the two hooks are independent on purpose: wiring the row to the click
+        // router meant one bad fingerprint cost both, which is exactly what happened on 2026.14.0.
         try {
-            // Resolve the click router first and inject it first: a row that cannot respond to
-            // taps is worse than no row, so the two hooks go in together or not at all.
-            NsfwDrawerItemClickFingerprint.let {
-                it.method.apply {
-                    // The tapped row lands in the register of the cast that follows the lookup.
-                    val castIndex = it.instructionMatches[2].index
-                    val rowRegister = getInstruction<OneRegisterInstruction>(castIndex).registerA
-                    val free = findFreeRegister(castIndex, rowRegister)
-
-                    addInstructionsWithLabels(
-                        castIndex + 1,
-                        """
-                            invoke-static { v$rowRegister }, $DRAWER_EXTENSION_CLASS->onDrawerRowClicked(Ljava/lang/Object;)Z
-                            move-result v$free
-                            if-eqz v$free, :not_handled
-                            return-void
-                            :not_handled
-                            nop
-                        """
-                    )
-                }
-            }
-
             NsfwDrawerSectionFingerprint.method.apply {
                 val collectionParameter = parameterTypes.indexOf("Ljava/util/Collection;")
 
@@ -95,8 +98,29 @@ val nsfwFeedModePatch = bytecodePatch(
             setExtensionIsPatchIncluded(DRAWER_EXTENSION_CLASS)
         } catch (ex: Exception) {
             Logger.getLogger(this::class.java.name).warning(
-                "'NSFW mode' could not add its navigation drawer row: ${ex.message}. " +
-                        "Feed filtering and the Morphe settings toggle are unaffected."
+                "'NSFW mode' could not add its navigation drawer row: ${ex.message}"
+            )
+        }
+
+        try {
+            NsfwDrawerItemClickFingerprint.method.apply {
+                val free = findFreeRegister(0)
+
+                addInstructionsWithLabels(
+                    0,
+                    """
+                        invoke-static { p0, p1 }, $DRAWER_EXTENSION_CLASS->onDrawerActionDispatched(Ljava/lang/Object;Ljava/lang/Object;)Z
+                        move-result v$free
+                        if-eqz v$free, :not_handled
+                        return-void
+                        :not_handled
+                        nop
+                    """
+                )
+            }
+        } catch (ex: Exception) {
+            Logger.getLogger(this::class.java.name).warning(
+                "'NSFW mode' could not hook the drawer click router: ${ex.message}"
             )
         }
 

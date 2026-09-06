@@ -93,29 +93,45 @@ internal object NsfwDrawerSectionFingerprint : Fingerprint(
 )
 
 /**
- * The drawer's click router. Reddit renamed the enclosing class and method, but kept the name of
- * the lambda class this method instantiates, which makes a stable anchor.
+ * Where the modern feed turns a listing of posts into feed elements.
  *
- * The tapped row is not a parameter: it is looked up from a map and cast, so the match walks to
- * that cast and the patch reads the row from the register it lands in.
+ * This is the hook that matters. `Listing` carries `Link` objects with their `over18` flag, but
+ * on-device testing showed emptying `Listing.children` leaves the rendered feed untouched: that
+ * model is the cache path (Reddit's own Room schema calls its tables `listing` and `link`).
+ * Posts reach the screen through this mapper instead, whatever fetched them, and its list really
+ * is `List<Link>` - the method body casts each element to `com.reddit.domain.model.Link`.
+ *
+ * Anchored on the suspend continuation class, whose name Reddit does not obfuscate, so the match
+ * does not depend on the enclosing class or method keeping their names.
+ */
+internal object NsfwFeedElementMapperFingerprint : Fingerprint(
+    returnType = "Ljava/lang/Object;",
+    filters = listOf(
+        newInstance(
+            type = $$"Lcom/reddit/feeds/impl/data/mapper/link/RedditListingFeedElementMapper$getFeedElements$1;"
+        )
+    ),
+    custom = { method, _ ->
+        method.parameters.any { it.startsWith("Ljava/util/List;") }
+    }
+)
+
+/**
+ * The drawer's click router.
+ *
+ * The previous anchor here assumed the tapped row was fetched from a map and cast, which is how
+ * a later app version does it. On 2026.14.0 the router instead receives an *action* carrying an
+ * index and reads the row out of its own list, so nothing matched and the row was never added
+ * either - the two hooks used to be applied together.
+ *
+ * Anchoring on the lambda class Reddit leaves unobfuscated avoids guessing at either shape; the
+ * extension resolves the row from the action reflectively and only acts when it finds its own
+ * title resource id, so a wrong guess is inert rather than harmful.
  */
 internal object NsfwDrawerItemClickFingerprint : Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
     returnType = "V",
     filters = listOf(
-        methodCall(
-            name = "get",
-            parameters = listOf("Ljava/lang/Object;"),
-            returnType = "Ljava/lang/Object;"
-        ),
-        opcode(
-            Opcode.MOVE_RESULT_OBJECT,
-            location = MatchAfterImmediately()
-        ),
-        opcode(
-            Opcode.CHECK_CAST,
-            location = MatchAfterImmediately()
-        ),
         newInstance(
             type = $$"Lcom/reddit/screens/drawer/community/CommunityDrawerPresenter$handleGenericItemClicked$1;"
         )
