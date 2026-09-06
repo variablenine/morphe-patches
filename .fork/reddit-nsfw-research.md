@@ -199,3 +199,55 @@ builds UI. `MATURE_DESTINATION` sits among GraphQL enum values, not screens; the
 
 The drawer row therefore toggles NSFW mode's feed filter. Reaching a real mature feed would mean
 building a feed screen inside the patch, which is out of proportion to the feature.
+
+## Device result (v1.2.1, Reddit 2026.14.0): the Listing hook is the wrong path
+
+Toast on device: `NSFW mode: kept 0 of 6 posts` / `Drawer row: hook never ran`, **with the home
+feed still showing its normal SFW posts**.
+
+That is decisive. The listing hook fires and the detector reads the posts fine (0 of 6 classified
+as NSFW, not "could not read"), but emptying that listing does not change the feed. So
+`com.reddit.domain.model.listing.Listing` is not what renders the modern home feed.
+
+The APK says the same thing independently. The Room schema in `defpackage.g8u` creates
+``listing`` and ``link`` tables (`linkId`, `listingPosition`, `linkJson`, `listingId`) — `Listing`
+and `Link` are the **cache / legacy** path. Verifying the fingerprint against real bytecode proved
+the hook was correctly placed on a code path that is not the one that matters.
+
+### The modern feed carries no NSFW flag anywhere the filter can reach
+
+The live home feed is GraphQL cell-based:
+
+`OnCellGroupFragment` (`defpackage.kvy`) → `CellGroupFragment` (`cc7`) → cells → feed elements.
+
+The feed element base class is `defpackage.qci`, and its whole state is:
+
+| field | meaning |
+|---|---|
+| `a` | linkId |
+| `b` | uniqueId |
+| `c` | boolean — isPromoted |
+| `d` | `ib70` identifier |
+
+No NSFW flag. Nor do `PostElement` (`gy10`) or `FeedPostSection` (`wki`) carry one — which is
+why `Hide ads` can filter on `promoted` but nothing can filter on `over18` at this level.
+
+### The insertion point that would work
+
+`defpackage.zci.b(kvy, kc7, mug)` converts one post model into one feed element, and **already
+returns null** when conversion throws — so its callers tolerate a dropped post. Returning null
+there for a non-NSFW post is the natural way to filter the modern feed.
+
+What is still missing is the NSFW flag on the input side: it has to be found in the GraphQL cell
+fragment chain (`cc7` → cells), which the feed dex's own classes do not expose. That is the next
+piece of work, and it needs the APK version actually being patched — every failure in this feature
+so far traces to developing against 2026.35.0 while the target install is 2026.14.0.
+
+### Drawer row
+
+`Drawer row: hook never ran` means `NsfwDrawerItemClickFingerprint` (resolved first, so its
+failure suppresses both hooks) did not match on 2026.14.0 — most likely the
+`CommunityDrawerPresenter$handleGenericItemClicked$1` lambda class or the map-lookup/cast
+sequence differs there. The section fingerprint is a copy of the shipping
+`hideSidebarComponentsPatch` one and is more likely sound; decoupling the two so a click-hook
+miss does not also cost the row would at least distinguish the two failures.
