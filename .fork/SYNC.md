@@ -16,7 +16,7 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-30 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+32 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
 
 **Feature: Hide brainrot comments (YouTube)**
@@ -57,6 +57,8 @@ patch no longer applies cleanly):
 | `extensions/reddit/.../settings/Settings.java` | Add `NSFW_FEED_MODE = new BooleanSetting("morphe_nsfw_feed_mode", FALSE)` in its own `// NSFW mode` region. Two-arg constructor on purpose: no app restart needed. |
 | `extensions/reddit/.../preference/categories/NsfwPreferenceCategory.java` | **New file.** Mirrors `AdsPreferenceCategory`. |
 | `extensions/reddit/.../preference/RedditPreferenceFragment.java` | Construct `NsfwPreferenceCategory` after `AdsPreferenceCategory`, plus its import. |
+| `extensions/reddit/.../nsfw/NsfwCellScanner.java` | **New file.** Android-free. Reads a post's id and NSFW state out of Reddit's GraphQL cell models by **shape, not name**: the post id is the `String` holding a `t3_` fullname (self-validating), and NSFW is an enum constant named `NSFW` on a type whose class name ends in `PostStatusIndicatorType` (Reddit does not obfuscate that enum). Depth- and cycle-bounded walk. |
+| `extensions/reddit/src/test/.../nsfw/NsfwCellScannerSelfTest.java` | **New file.** Plain-javac self-test; must print `15 passed, 0 failed`. |
 | `extensions/reddit/.../nsfw/DrawerRowCloner.java` | **New file.** Android-free. Clones a drawer row with a different title resource without naming its class: matches a constructor whose parameter count equals the row's field count, fills it by type, and then **verifies** the result field by field — the title's own field must hold the new id and every other int must be unchanged — retrying with the title in each int slot. Checking only that the new id appears *somewhere* is not enough; that passes a clone with the title and icon swapped, which is exactly the bug the self-test caught. |
 | `extensions/reddit/src/test/.../nsfw/DrawerRowClonerSelfTest.java` | **New file.** Plain-javac self-test; must print `19 passed, 0 failed`. Covers reordered fields, reordered constructor parameters, extra and null reference fields, single-int rows, and refusals. |
 | `extensions/reddit/.../patches/NsfwDrawerRow.java` | **New file.** Adds an NSFW row to the navigation drawer under Reddit's Popular row, and toggles NSFW mode on tap. Builds the row by **cloning** the Popular row reflectively — the row type is obfuscated and renamed every release, but its shape `(boolean, int titleRes, int iconRes, long uniqueId)` is stable — and identifies Popular by looking up the `popular_feed_label` string id at runtime, which also disambiguates the title int from the icon int. All reflective and wrapped: a shape change costs the row, not the app. |
@@ -113,7 +115,7 @@ Known limitation to preserve on sync: the hook is the `Listing` model, so it cov
    the `.rej` hunks manually using the semantics table above (upstream may have refactored the touched
    files). **Regenerate `.fork/upstream-delta.patch`** against the new tree afterwards so the next sync
    starts clean.
-5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11, NsfwPostDetectorSelfTest 35/35, DrawerRowClonerSelfTest 19/19).
+5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11, NsfwPostDetectorSelfTest 35/35, DrawerRowClonerSelfTest 19/19, NsfwCellScannerSelfTest 15/15).
 6. Update the state markers in this file. Commit everything as
    `bump: Sync upstream Morphe patches vX.Y.Z` (the `bump:` type produces a patch release), push to `dev`.
    If the push to `dev` is rejected with 403 / a branch restriction, see **Automation (routine) setup**

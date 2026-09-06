@@ -51,6 +51,26 @@ val nsfwFeedModePatch = bytecodePatch(
 
         setExtensionIsPatchIncluded(EXTENSION_CLASS)
 
+        // region Home feed
+
+        // The one hook that reaches the home feed. Filters the GraphQL response's edges before
+        // they become feed elements, which is the last point a post's NSFW state is visible:
+        // the elements carry only a link id, a unique id, promoted and an identifier.
+        try {
+            NsfwHomeFeedPageFingerprint.method.addInstructions(
+                0,
+                """
+                    invoke-static/range { p1 .. p1 }, $EXTENSION_CLASS->filterHomeFeedResponse(Ljava/lang/Object;)V
+                """
+            )
+        } catch (ex: Exception) {
+            Logger.getLogger(this::class.java.name).warning(
+                "'NSFW mode' could not hook the home feed page builder: ${ex.message}"
+            )
+        }
+
+        // endregion
+
         // region Modern feed
 
         // The listing hook above is the cache path: on device it filters a listing to nothing

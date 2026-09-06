@@ -1,7 +1,9 @@
 package app.morphe.extension.reddit.patches;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import app.morphe.extension.reddit.nsfw.NsfwCellScanner;
 import app.morphe.extension.reddit.nsfw.NsfwPostDetector;
 import app.morphe.extension.reddit.settings.Settings;
 import app.morphe.extension.shared.Logger;
@@ -58,6 +60,86 @@ public final class NsfwFeedModePatch {
      */
     public static void setNsfwModeEnabled(boolean enabled) {
         Settings.NSFW_FEED_MODE.save(enabled);
+    }
+
+    /**
+     * Injection point. Filters the home feed's GraphQL response before its posts become feed
+     * elements.
+     *
+     * <p>This is the hook that reaches the home feed. The other two do not: the listing model is
+     * the cache path, and the listing element mapper turned out to serve only the History feed.
+     * The home feed is built from GraphQL cells whose elements carry no NSFW flag at all, so the
+     * decision has to be made here, on the response, where the metadata cell still carries its
+     * {@code statusIndicators}.
+     *
+     * <p>Filters the edge list in place. Unreadable edges are kept rather than dropped, and a
+     * response where nothing at all was readable is left alone, so a model change costs the
+     * filter rather than the feed.
+     *
+     * @param response The feed response about to be mapped.
+     */
+    public static void filterHomeFeedResponse(Object response) {
+        try {
+            if (response == null || !isNsfwModeEnabled()) {
+                return;
+            }
+
+            for (java.lang.reflect.Field field : response.getClass().getDeclaredFields()) {
+                if (!List.class.isAssignableFrom(field.getType())) {
+                    continue;
+                }
+                field.setAccessible(true);
+
+                Object value = field.get(response);
+                if (!(value instanceof List)) {
+                    continue;
+                }
+
+                @SuppressWarnings("unchecked")
+                List<Object> edges = (List<Object>) value;
+                if (edges.isEmpty()) {
+                    continue;
+                }
+
+                List<Object> keep = new ArrayList<>(edges.size());
+                int classified = 0;
+
+                for (Object edge : edges) {
+                    NsfwCellScanner.Scan scan = NsfwCellScanner.scan(edge);
+                    if (scan == null) {
+                        // Not a post - a carousel, an ad unit, an announcement. Leave it.
+                        keep.add(edge);
+                        continue;
+                    }
+                    classified++;
+                    if (scan.nsfw) {
+                        keep.add(edge);
+                    }
+                }
+
+                if (classified == 0) {
+                    if (reportedSources.add("unreadable-home")) {
+                        Utils.showToastLong("NSFW mode (home): could not read any post, "
+                                + "feed left unfiltered");
+                        Logger.printInfo(() -> "NSFW mode: no readable posts in the home response");
+                    }
+                    return;
+                }
+
+                int before = edges.size();
+                edges.clear();
+                edges.addAll(keep);
+
+                if (reportedSources.add("home")) {
+                    Utils.showToastShort("NSFW mode (home): kept " + keep.size()
+                            + " of " + before + " posts");
+                }
+                Logger.printDebug(() -> "NSFW mode: home feed kept " + keep.size() + " posts");
+                return;
+            }
+        } catch (Exception ex) {
+            Logger.printException(() -> "filterHomeFeedResponse failure", ex);
+        }
     }
 
     /**
