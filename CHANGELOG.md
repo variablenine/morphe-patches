@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/variablenine/morphe-patches/compare/v1.3.0...v1.3.1) (2026-09-06)
+
+### 🐛 Bug Fixes
+
+* Read the home feed's NSFW flag from the indicators cell ([5824767](https://github.com/variablenine/morphe-patches/commit/582476793c11cd72ae829144f0087872f18c39d6))
+
 ## [1.3.0](https://github.com/variablenine/morphe-patches/compare/v1.2.3...v1.3.0) (2026-09-06)
 
 ### ✨ New Features
