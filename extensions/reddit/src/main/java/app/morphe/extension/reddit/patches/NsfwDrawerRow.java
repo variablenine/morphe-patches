@@ -1,5 +1,7 @@
 package app.morphe.extension.reddit.patches;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -129,6 +131,77 @@ public final class NsfwDrawerRow {
         }
 
         return items;
+    }
+
+    /**
+     * Injection point. Handles a drawer action before the app routes it.
+     *
+     * <p>The router receives an action carrying a row index rather than the row itself, and reads
+     * the row out of one of the presenter's own lists. Both the action's index field and that
+     * list are obfuscated, so rather than naming either, this tries every list the presenter
+     * holds and only acts when the row at that index carries the NSFW row's own title resource
+     * id. A wrong list therefore does nothing instead of hijacking someone else's tap.
+     *
+     * @param presenter The drawer presenter.
+     * @param action    The action being routed.
+     * @return Whether this was a tap on the NSFW row, and has been handled.
+     */
+    public static boolean onDrawerActionDispatched(Object presenter, Object action) {
+        try {
+            int nsfwId = nsfwTitleId();
+            if (presenter == null || action == null || nsfwId == 0) {
+                return false;
+            }
+
+            int index = firstIntField(action);
+            if (index < 0) {
+                return false;
+            }
+
+            for (Field field : presenter.getClass().getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())
+                        || !List.class.isAssignableFrom(field.getType())) {
+                    continue;
+                }
+
+                field.setAccessible(true);
+                Object value = field.get(presenter);
+                if (!(value instanceof List)) {
+                    continue;
+                }
+
+                List<?> rows = (List<?>) value;
+                if (index >= rows.size()) {
+                    continue;
+                }
+
+                if (DrawerRowCloner.hasIntField(rows.get(index), nsfwId)) {
+                    return onDrawerRowClicked(rows.get(index));
+                }
+            }
+        } catch (Exception ex) {
+            Logger.printException(() -> "onDrawerActionDispatched failure", ex);
+        }
+
+        return false;
+    }
+
+    /**
+     * @return The first int field's value, or -1 if there is none.
+     */
+    private static int firstIntField(Object object) {
+        try {
+            for (Field field : object.getClass().getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers()) || field.getType() != int.class) {
+                    continue;
+                }
+                field.setAccessible(true);
+                return field.getInt(object);
+            }
+        } catch (Exception ex) {
+            Logger.printException(() -> "firstIntField failure", ex);
+        }
+        return -1;
     }
 
     /**
