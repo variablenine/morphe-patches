@@ -1259,6 +1259,76 @@ index 00000000..488e7a4e
 +        return cut < 0 ? name : name.substring(cut + 1);
 +    }
 +}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwModeIcon.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwModeIcon.java
+new file mode 100644
+index 00000000..1056f667
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwModeIcon.java
+@@ -0,0 +1,64 @@
++package app.morphe.extension.reddit.patches;
++
++import app.morphe.extension.reddit.settings.Settings;
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.ResourceType;
++import app.morphe.extension.shared.ResourceUtils;
++
++/**
++ * Swaps the Reddit brand mark in the home app bar for an 18+ one while NSFW mode is on, so the
++ * mode can be read off the one thing that is always on screen.
++ *
++ * <p>The app bar is Compose, and the mark is a single {@code painterResource} call on
++ * {@code icon_brand_full_color}. The patch inserts this method over that resource id, so the
++ * whole swap is one integer: nothing is added to the layout and nothing is drawn over.
++ *
++ * <p>The id is resolved once and cached. Failing to resolve it leaves Reddit's own mark in
++ * place, which is the right failure: an app bar with no icon at all would look broken.
++ */
++@SuppressWarnings("unused")
++public final class NsfwModeIcon {
++
++    private static final String ICON_NAME = "morphe_nsfw_mode_icon";
++
++    /** Resolved lazily rather than in a static initialiser, which runs before resources exist. */
++    private static int iconId = -1;
++
++    private NsfwModeIcon() {
++    }
++
++    /**
++     * Injection point. Chooses the drawable the home app bar's brand mark is drawn from.
++     *
++     * @param defaultIcon Reddit's own brand mark.
++     * @return The 18+ mark while NSFW mode is on, and Reddit's own otherwise.
++     */
++    public static int brandIcon(int defaultIcon) {
++        try {
++            if (!Settings.NSFW_FEED_MODE.get()) {
++                return defaultIcon;
++            }
++
++            int icon = nsfwIcon();
++            return icon == 0 ? defaultIcon : icon;
++        } catch (Exception ex) {
++            Logger.printException(() -> "brandIcon failure", ex);
++            return defaultIcon;
++        }
++    }
++
++    private static int nsfwIcon() {
++        int cached = iconId;
++        if (cached != -1) {
++            return cached;
++        }
++
++        int resolved = ResourceUtils.getIdentifier(ResourceType.DRAWABLE, ICON_NAME);
++        if (resolved == 0) {
++            Logger.printInfo(() -> "NSFW mode: " + ICON_NAME + " is missing, "
++                    + "leaving the app bar mark alone");
++        }
++        iconId = resolved;
++        return resolved;
++    }
++}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
 index 892166b3..c473bce9 100644
 --- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
@@ -2701,10 +2771,10 @@ index 63fc58ee..8352f4b9 100644
  }
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
 new file mode 100644
-index 00000000..7583728c
+index 00000000..8f28fbf4
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
-@@ -0,0 +1,122 @@
+@@ -0,0 +1,144 @@
 +package app.morphe.patches.reddit.layout.nsfw
 +
 +import app.morphe.patcher.Fingerprint
@@ -2712,6 +2782,8 @@ index 00000000..7583728c
 +import app.morphe.patcher.methodCall
 +import app.morphe.patcher.newInstance
 +import app.morphe.patcher.parametersMatch
++import app.morphe.patches.all.misc.resources.ResourceType
++import app.morphe.patches.all.misc.resources.resourceLiteral
 +import com.android.tools.smali.dexlib2.AccessFlags
 +
 +/**
@@ -2827,21 +2899,47 @@ index 00000000..7583728c
 +        )
 +    )
 +)
++
++/**
++ * The home app bar's search field, which draws Reddit's brand mark to the left of the hint.
++ *
++ * The bar is Compose, so there is no view to reach for: the mark is one `painterResource` call
++ * on `icon_brand_full_color`, and the swap is done by rewriting that one resource id. Anchored on
++ * the package - Reddit does not obfuscate
++ * `com/reddit/feedslegacy/switcher/impl/homepager/compose/composables/revamp/rplcustom/` - plus
++ * the drawable itself, resolved by name so the match does not depend on an id that moves every
++ * release.
++ */
++internal object NsfwHomeAppBarBrandIconFingerprint : Fingerprint(
++    definingClass =
++        "Lcom/reddit/feedslegacy/switcher/impl/homepager/compose/composables/revamp/rplcustom/",
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
++    returnType = "V",
++    filters = listOf(
++        resourceLiteral(ResourceType.DRAWABLE, "icon_brand_full_color")
++    )
++)
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 new file mode 100644
-index 00000000..e8c61744
+index 00000000..b346e51b
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,180 @@
 +package app.morphe.patches.reddit.layout.nsfw
 +
 +import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 +import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
++import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 +import app.morphe.patcher.patch.bytecodePatch
++import app.morphe.patcher.patch.resourcePatch
++import app.morphe.patches.all.misc.resources.resourceMappingPatch
 +import app.morphe.patches.reddit.misc.settings.settingsPatch
 +import app.morphe.patches.reddit.shared.Constants.COMPATIBILITY_REDDIT
++import app.morphe.util.ResourceGroup
++import app.morphe.util.copyResources
 +import app.morphe.util.findFreeRegister
 +import app.morphe.util.setExtensionIsPatchIncluded
++import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 +import java.util.logging.Logger
 +
 +private const val EXTENSION_CLASS =
@@ -2853,6 +2951,21 @@ index 00000000..e8c61744
 +private const val REFRESH_EXTENSION_CLASS =
 +    "Lapp/morphe/extension/reddit/patches/NsfwFeedRefresher;"
 +
++private const val ICON_EXTENSION_CLASS =
++    "Lapp/morphe/extension/reddit/patches/NsfwModeIcon;"
++
++private val nsfwFeedModeResourcePatch = resourcePatch {
++    execute {
++        copyResources(
++            "nsfwmode",
++            ResourceGroup(
++                resourceDirectoryName = "drawable",
++                "morphe_nsfw_mode_icon.xml"
++            )
++        )
++    }
++}
++
 +@Suppress("unused")
 +val nsfwFeedModePatch = bytecodePatch(
 +    name = "NSFW mode",
@@ -2863,7 +2976,11 @@ index 00000000..e8c61744
 +) {
 +    compatibleWith(COMPATIBILITY_REDDIT)
 +
-+    dependsOn(settingsPatch)
++    dependsOn(
++        settingsPatch,
++        nsfwFeedModeResourcePatch,
++        resourceMappingPatch
++    )
 +
 +    execute {
 +        setExtensionIsPatchIncluded(EXTENSION_CLASS)
@@ -2907,6 +3024,33 @@ index 00000000..e8c61744
 +        } catch (ex: Exception) {
 +            Logger.getLogger(this::class.java.name).warning(
 +                "'NSFW mode' could not hook the feed view model: ${ex.message}"
++            )
++        }
++
++        // endregion
++
++        // region Home app bar mark
++
++        // The app bar is Compose, so the mark is one painterResource call rather than a view:
++        // the swap is done by rewriting the resource id it is given.
++        try {
++            NsfwHomeAppBarBrandIconFingerprint.let {
++                it.method.apply {
++                    val index = it.instructionMatches.first().index
++                    val register = getInstruction<OneRegisterInstruction>(index).registerA
++
++                    addInstructions(
++                        index + 1,
++                        """
++                            invoke-static/range { v$register .. v$register }, $ICON_EXTENSION_CLASS->brandIcon(I)I
++                            move-result v$register
++                        """
++                    )
++                }
++            }
++        } catch (ex: Exception) {
++            Logger.getLogger(this::class.java.name).warning(
++                "'NSFW mode' could not swap the home app bar mark: ${ex.message}"
 +            )
 +        }
 +
@@ -3213,3 +3357,33 @@ index 00000000..33814e4a
 +        android:padding="@dimen/controls_overlay_action_button_padding"
 +        android:src="@drawable/morphe_yt_cat_lock_button_bold" />
 +</RelativeLayout>
+diff --git a/patches/src/main/resources/nsfwmode/drawable/morphe_nsfw_mode_icon.xml b/patches/src/main/resources/nsfwmode/drawable/morphe_nsfw_mode_icon.xml
+new file mode 100644
+index 00000000..9e025939
+--- /dev/null
++++ b/patches/src/main/resources/nsfwmode/drawable/morphe_nsfw_mode_icon.xml
+@@ -0,0 +1,24 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++    Stands in for Reddit's brand mark in the home app bar while NSFW mode is on, so the mode is
++    readable at a glance from the one place that is always on screen.
++
++    #ff585b is Reddit's own NSFW colour - it is the value of `alienblue_nsfw`, `midnight_nsfw`,
++    `mint_nsfw`, `night_nsfw` and every other themed variant in the app, so this reads as the
++    app's own 18+ red rather than an arbitrary one.
++-->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="24dp"
++    android:height="24dp"
++    android:viewportWidth="24"
++    android:viewportHeight="24">
++    <path
++        android:fillColor="#ff585b"
++        android:pathData="M12,2C6.477,2 2,6.477 2,12s4.477,10 10,10 10,-4.477 10,-10S17.523,2 12,2z"/>
++    <path
++        android:fillColor="#ffffffff"
++        android:pathData="M12,5.75c0.76,0 1.375,0.616 1.375,1.375v6.25a1.375,1.375 0,0 1,-2.75 0V7.125C10.625,6.366 11.24,5.75 12,5.75z"/>
++    <path
++        android:fillColor="#ffffffff"
++        android:pathData="M12,16.35m-1.5,0a1.5,1.5 0,1 0,3 0a1.5,1.5 0,1 0,-3 0"/>
++</vector>

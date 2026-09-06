@@ -2,11 +2,17 @@ package app.morphe.patches.reddit.layout.nsfw
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
+import app.morphe.patcher.patch.resourcePatch
+import app.morphe.patches.all.misc.resources.resourceMappingPatch
 import app.morphe.patches.reddit.misc.settings.settingsPatch
 import app.morphe.patches.reddit.shared.Constants.COMPATIBILITY_REDDIT
+import app.morphe.util.ResourceGroup
+import app.morphe.util.copyResources
 import app.morphe.util.findFreeRegister
 import app.morphe.util.setExtensionIsPatchIncluded
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import java.util.logging.Logger
 
 private const val EXTENSION_CLASS =
@@ -18,6 +24,21 @@ private const val DRAWER_EXTENSION_CLASS =
 private const val REFRESH_EXTENSION_CLASS =
     "Lapp/morphe/extension/reddit/patches/NsfwFeedRefresher;"
 
+private const val ICON_EXTENSION_CLASS =
+    "Lapp/morphe/extension/reddit/patches/NsfwModeIcon;"
+
+private val nsfwFeedModeResourcePatch = resourcePatch {
+    execute {
+        copyResources(
+            "nsfwmode",
+            ResourceGroup(
+                resourceDirectoryName = "drawable",
+                "morphe_nsfw_mode_icon.xml"
+            )
+        )
+    }
+}
+
 @Suppress("unused")
 val nsfwFeedModePatch = bytecodePatch(
     name = "NSFW mode",
@@ -28,7 +49,11 @@ val nsfwFeedModePatch = bytecodePatch(
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)
 
-    dependsOn(settingsPatch)
+    dependsOn(
+        settingsPatch,
+        nsfwFeedModeResourcePatch,
+        resourceMappingPatch
+    )
 
     execute {
         setExtensionIsPatchIncluded(EXTENSION_CLASS)
@@ -72,6 +97,33 @@ val nsfwFeedModePatch = bytecodePatch(
         } catch (ex: Exception) {
             Logger.getLogger(this::class.java.name).warning(
                 "'NSFW mode' could not hook the feed view model: ${ex.message}"
+            )
+        }
+
+        // endregion
+
+        // region Home app bar mark
+
+        // The app bar is Compose, so the mark is one painterResource call rather than a view:
+        // the swap is done by rewriting the resource id it is given.
+        try {
+            NsfwHomeAppBarBrandIconFingerprint.let {
+                it.method.apply {
+                    val index = it.instructionMatches.first().index
+                    val register = getInstruction<OneRegisterInstruction>(index).registerA
+
+                    addInstructions(
+                        index + 1,
+                        """
+                            invoke-static/range { v$register .. v$register }, $ICON_EXTENSION_CLASS->brandIcon(I)I
+                            move-result v$register
+                        """
+                    )
+                }
+            }
+        } catch (ex: Exception) {
+            Logger.getLogger(this::class.java.name).warning(
+                "'NSFW mode' could not swap the home app bar mark: ${ex.message}"
             )
         }
 

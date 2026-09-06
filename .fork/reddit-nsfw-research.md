@@ -360,3 +360,27 @@ resolves - the state the first working build of the home hook shipped in. So whe
 down to no posts at all, one post is kept back. It costs a single SFW post per barren page and
 it leaves the feed something to render, which is what lets it page on to where the 18+ posts
 are.
+
+
+## The home app bar is Compose (2026.14.0)
+
+The Reddit mark at the top of the home screen is not a view. `toolbar_nav_search.xml` still
+exists but is a different, older bar - its hint is `action_search` ("Search"), while the one on
+screen reads `search_bar_hint` ("Find anything"), and that string appears in **no layout at all**.
+It is loaded from `j22.g0.f(...)`, a composable tagged `home_revamp_m1_app_bar`, which calls
+
+```
+com.reddit.feedslegacy.switcher.impl.homepager.compose.composables.revamp.rplcustom.d
+    .a(int, Composer, Modifier, String hint, Function0)
+```
+
+and that method draws the mark with a single `painterResource(icon_brand_full_color)`. That one
+resource id is the whole hook: rewriting it swaps the mark, with nothing added to the tree and
+nothing drawn over. The `rplcustom` package is not obfuscated; the class letter (`d`) is, which
+is why the fingerprint anchors on the package plus the drawable resolved by name.
+
+`new_reddit_logo` and `reddit_logo_header` are red herrings - neither is referenced from code in
+this build.
+
+Reddit's own NSFW colour is `#ff585b`, identical across every theme (`alienblue_nsfw`,
+`midnight_nsfw`, `mint_nsfw`, `night_nsfw`, ...).
