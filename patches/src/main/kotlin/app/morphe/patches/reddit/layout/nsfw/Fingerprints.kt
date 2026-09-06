@@ -5,6 +5,8 @@ import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.newInstance
 import app.morphe.patcher.parametersMatch
+import app.morphe.patches.all.misc.resources.ResourceType
+import app.morphe.patches.all.misc.resources.resourceLiteral
 import com.android.tools.smali.dexlib2.AccessFlags
 
 /**
@@ -118,5 +120,25 @@ internal object NsfwHomeFeedPageFingerprint : Fingerprint(
         fieldAccess(
             smali = "Lcom/reddit/feeds/data/FeedType;->HOME:Lcom/reddit/feeds/data/FeedType;"
         )
+    )
+)
+
+/**
+ * The home app bar's search field, which draws Reddit's brand mark to the left of the hint.
+ *
+ * The bar is Compose, so there is no view to reach for: the mark is one `painterResource` call
+ * on `icon_brand_full_color`, and the swap is done by rewriting that one resource id. Anchored on
+ * the package - Reddit does not obfuscate
+ * `com/reddit/feedslegacy/switcher/impl/homepager/compose/composables/revamp/rplcustom/` - plus
+ * the drawable itself, resolved by name so the match does not depend on an id that moves every
+ * release.
+ */
+internal object NsfwHomeAppBarBrandIconFingerprint : Fingerprint(
+    definingClass =
+        "Lcom/reddit/feedslegacy/switcher/impl/homepager/compose/composables/revamp/rplcustom/",
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "V",
+    filters = listOf(
+        resourceLiteral(ResourceType.DRAWABLE, "icon_brand_full_color")
     )
 )
