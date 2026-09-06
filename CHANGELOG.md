@@ -1,3 +1,9 @@
+## [1.3.2](https://github.com/variablenine/morphe-patches/compare/v1.3.1...v1.3.2) (2026-09-06)
+
+### 🐛 Bug Fixes
+
+* Confine NSFW mode to the home feed, and reload it on the switch ([7cb9798](https://github.com/variablenine/morphe-patches/commit/7cb9798079395d92fabe00ee96f6d3f97975945b))
+
 ## [1.3.1](https://github.com/variablenine/morphe-patches/compare/v1.3.0...v1.3.1) (2026-09-06)
 
 ### 🐛 Bug Fixes
