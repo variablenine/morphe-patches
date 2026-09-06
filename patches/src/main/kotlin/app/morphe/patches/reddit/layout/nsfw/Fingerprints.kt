@@ -137,3 +137,27 @@ internal object NsfwDrawerItemClickFingerprint : Fingerprint(
         )
     )
 )
+
+/**
+ * The home feed's page builder: it takes the GraphQL response, walks its edges into feed
+ * elements, and returns a page.
+ *
+ * This is the only one of the three feed hooks that reaches the home feed. The listing model is
+ * the cache path, and `RedditListingFeedElementMapper.getFeedElements` turned out to have exactly
+ * one real caller - the History feed. Filtering the response's edges here, before they become
+ * elements, is also the only place a post's NSFW state is still visible: the elements themselves
+ * carry only a link id, a unique id, an "is promoted" flag and an identifier.
+ *
+ * Anchored on the package (Reddit does not obfuscate `com/reddit/feeds/home/impl/data/paging/`)
+ * plus the two unobfuscated enum constants the method reads, which pin it precisely.
+ */
+internal object NsfwHomeFeedPageFingerprint : Fingerprint(
+    definingClass = "Lcom/reddit/feeds/home/impl/data/paging/",
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
+    parameters = listOf("L", "Ljava/lang/Integer;", "L"),
+    filters = listOf(
+        fieldAccess(
+            smali = "Lcom/reddit/feeds/data/FeedType;->HOME:Lcom/reddit/feeds/data/FeedType;"
+        )
+    )
+)

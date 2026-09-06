@@ -281,3 +281,30 @@ Fingerprint anchors, verified present in the same dex: `y.a` is `public final vo
 exactly one `new-instance CommunityDrawerPresenter$handleGenericItemClicked$1`; `d.a` is
 `public final`, returns `Ljava/lang/Object;` and contains exactly one
 `new-instance RedditListingFeedElementMapper$getFeedElements$1`. Both fingerprints resolve.
+
+## Where the home feed's NSFW flag actually lives
+
+Three feed hooks were tried before one reached the home feed. Recorded so the dead ends are not
+re-explored:
+
+| Hook | Reality |
+|---|---|
+| `Listing.<init>` children | The **cache** path. Reddit's Room schema names the tables `listing`/`link`. Filtering it empties nothing on screen. |
+| `RedditListingFeedElementMapper.getFeedElements(List<Link>)` | Has exactly **one** real caller: `com.reddit.feeds.history.impl.data.b.h` - the **History** feed. |
+| `com.reddit.feeds.home.impl.data.paging.d.a(f50, Integer, sw1.b)` | **The home feed.** Walks the GraphQL response's edges into elements and returns a page. |
+
+The home feed never creates `Link` objects at all - none of `GqlPostToLinkDomainModelMapper`'s 30
+callers is in the feed path - so `Link.getOver18()` is unavailable there. And the feed element
+base class `ym1.g0` carries only `linkId`, `uniqueId`, an `isPromoted` boolean and an identifier.
+That is why `Hide ads` can filter on `promoted` and nothing could filter on `over18`.
+
+The flag that survives into the cell pipeline is the one the app itself uses to draw the 18+ tag:
+`statusIndicators` on `MetadataCellFragment` / `ClassicMetadataCellFragment`, a list of
+**`com.reddit.type.PostStatusIndicatorType`**, whose `NSFW` constant is unobfuscated. The post id
+travels alongside as a `t3_` fullname. Both are read by shape rather than by field name, since
+every field on those fragments is renamed each release.
+
+The page builder is anchored by its package - `com/reddit/feeds/home/impl/data/paging/` survives
+obfuscation - plus the unobfuscated `FeedType.HOME` constant it reads. Its edge list is filtered
+in place before conversion; the loop already skips null elements, and unreadable edges are kept
+rather than dropped.
