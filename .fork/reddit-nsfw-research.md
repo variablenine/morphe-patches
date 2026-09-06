@@ -159,6 +159,18 @@ opens a feed for a given `FeedType` has not been pinned down yet. Several `defpa
 take a `FeedType` parameter (`w1o, z570, nug, xoi, gd3, t570, p110, i8h0, n9i, omi`) and are the
 place to look next.
 
+Strongest evidence yet that MATURE is renderable client-side: `defpackage.vh40.L(FeedType)`
+maps **every** feed type to a `com.reddit.qsf.screens.QsfScreenType`, and `MATURE` has its own
+`MATURE_FEED` entry sitting in the same complete `switch` as `HOME_FEED`, `POPULAR_FEED`,
+`LATEST_FEED` and `ALL_FEED`. It is not a leftover constant.
+
+Two navigation helpers the drawer already uses look like an easier action than the internal
+navigator, since both take a plain destination rather than an obfuscated screen type:
+`defpackage.hrx.d(..., Activity, Uri, ..., int)` (used for the Reddit Rules / Privacy Policy /
+User Agreement rows) and `com.reddit.deeplink.a.a(deeplinkNav, Context, String, int)` (used for
+link rows). No `/mature`-style route showed up in the deeplink path strings, though, so whether
+either can address the mature feed is still unproven.
+
 One caution found along the way: `QsfScreenType.MATURE_FEED` exists alongside
 `RESOLVER_GATE_PRESENTATION_MATURE_DESTINATION` and
 `CHECKPOINT_GATE_PRESENTATION_MATURE_DESTINATION`, which look like age-verification gates in front
