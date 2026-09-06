@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/variablenine/morphe-patches/compare/v1.2.0...v1.2.1) (2026-09-06)
+
+### 🐛 Bug Fixes
+
+* Make the NSFW drawer row clone survive a different row shape ([409c4a8](https://github.com/variablenine/morphe-patches/commit/409c4a8bb3e795b38c33ff6691e72194c032625e))
+
 ## [1.2.0](https://github.com/variablenine/morphe-patches/compare/v1.1.9...v1.2.0) (2026-09-06)
 
 ### ✨ New Features
