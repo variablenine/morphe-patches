@@ -16,7 +16,7 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-31 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+33 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
 
 **Feature: Hide brainrot comments (YouTube)**
