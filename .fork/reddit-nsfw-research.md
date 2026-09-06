@@ -298,13 +298,48 @@ callers is in the feed path - so `Link.getOver18()` is unavailable there. And th
 base class `ym1.g0` carries only `linkId`, `uniqueId`, an `isPromoted` boolean and an identifier.
 That is why `Hide ads` can filter on `promoted` and nothing could filter on `over18`.
 
-The flag that survives into the cell pipeline is the one the app itself uses to draw the 18+ tag:
-`statusIndicators` on `MetadataCellFragment` / `ClassicMetadataCellFragment`, a list of
-**`com.reddit.type.PostStatusIndicatorType`**, whose `NSFW` constant is unobfuscated. The post id
-travels alongside as a `t3_` fullname. Both are read by shape rather than by field name, since
-every field on those fragments is renamed each release.
+### Where NSFW actually lives in a cell (2026.14.0)
+
+`MetadataCellFragment.statusIndicators` was the first guess and it is **wrong**.
+`com.reddit.type.PostStatusIndicatorType` has no `NSFW` constant at all - its members are
+`ADMIN, MOD, PINNED, LOCKED, REPORTED, APPROVED, REMOVED, PROFILE_VERIFIED_AUTHOR, BOT, APP,
+UNKNOWN__`. Reading it can only ever answer "not NSFW", which empties the feed.
+
+The real marker is **`com.reddit.type.CellIndicatorType.NSFW`**
+(`APP, CLUB_CONTENT, COMMERCIAL_COMMUNICATION, GAME, NSFW, ORIGINAL, QUARANTINED, SPOILER,
+UNKNOWN__`), carried in `IndicatorsCellFragment.indicators` - `ep1.wg0`, a member of the shared
+`Cell` union `ep1.jm` that every feed query parses through `ep1.nm`. A second enum,
+`com.reddit.type.NSFWState`, spells the same flag `NSFW` elsewhere in the schema. Enum constant
+names go over the wire, so R8 leaves them alone; the enum *type* is matched on the constant name
+rather than the class, which covers both.
+
+The post id travels alongside as a `t3_` fullname. Both are read by shape rather than by field
+name, since every field on those fragments is renamed each release.
+
+**Depth is part of the answer.** An edge reaches its indicators through
+
+```
+Edge (d50) -> FeedElementEdgeFragment (a50) -> Node (z40) -> OnCellGroupFragment (jb1)
+  -> CellGroupFragment (lm) -> cells -> Cell (jm) -> IndicatorsCellFragment (wg0)
+  -> indicators -> CellIndicatorType.NSFW
+```
+
+which is nine hops. A walk that stops at four finds the post id (`Node.id`, three hops) and none
+of the tags, so every post reads as SFW - the failure looks exactly like a correct filter over a
+feed with no 18+ posts.
 
 The page builder is anchored by its package - `com/reddit/feeds/home/impl/data/paging/` survives
 obfuscation - plus the unobfuscated `FeedType.HOME` constant it reads. Its edge list is filtered
 in place before conversion; the loop already skips null elements, and unreadable edges are kept
-rather than dropped.
+rather than dropped. Filtering in place also keeps the two values the builder reads off the same
+response - `f50Var.b.a`, the pagination cursor, and `f50Var.a`, the dist - exactly as they
+arrived.
+
+### A page must never come back empty
+
+`d.a` returns `new lk1.b(elements, cursor, ...)`. Hand it a page whose element list is empty and
+the feed has nothing to draw and nothing to scroll, which on screen is a spinner that never
+resolves - the state the first working build of the home hook shipped in. So when a page filters
+down to no posts at all, one post is kept back. It costs a single SFW post per barren page and
+it leaves the feed something to render, which is what lets it page on to where the 18+ posts
+are.

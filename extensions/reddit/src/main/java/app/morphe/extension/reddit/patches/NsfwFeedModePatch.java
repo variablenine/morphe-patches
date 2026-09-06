@@ -29,16 +29,22 @@ import app.morphe.extension.shared.Utils;
 public final class NsfwFeedModePatch {
 
     /**
-     * Whether the "no item was understood" warning has already been logged.
-     * Only logged once, since this runs on every page of every feed.
-     */
-    /**
-     * Whether the one-off diagnostic toast has been shown this app start. Temporary: it exists
-     * to answer, on a real device, whether this listing hook is reached at all on a given Reddit
-     * version - something no amount of decompiling settles. Remove once that is known.
+     * Which hooks have already reported themselves on screen this app start. Temporary: the
+     * toasts exist to answer, on a real device, which hooks a given Reddit version actually
+     * reaches - something no amount of decompiling settles. Remove once that is known.
      */
     private static final java.util.Set<String> reportedSources =
             java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    /** How many home feed pages report their result on screen before the toasts stop. */
+    private static final int DIAGNOSTIC_PAGES = 3;
+
+    /** How many distinct tags the diagnostic toast names before it summarises the rest. */
+    private static final int DIAGNOSTIC_TAGS = 8;
+
+    /** How many home feed pages have been filtered this app start. */
+    private static final java.util.concurrent.atomic.AtomicInteger pagesSeen =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     /**
      * @return If this patch was included during patching.
@@ -68,13 +74,14 @@ public final class NsfwFeedModePatch {
      *
      * <p>This is the hook that reaches the home feed. The other two do not: the listing model is
      * the cache path, and the listing element mapper turned out to serve only the History feed.
-     * The home feed is built from GraphQL cells whose elements carry no NSFW flag at all, so the
-     * decision has to be made here, on the response, where the metadata cell still carries its
-     * {@code statusIndicators}.
+     * The home feed is built from GraphQL cells whose feed elements carry no NSFW flag at all,
+     * so the decision has to be made here, on the response, where the post's indicators cell
+     * still carries its {@code CellIndicatorType.NSFW}.
      *
-     * <p>Filters the edge list in place. Unreadable edges are kept rather than dropped, and a
-     * response where nothing at all was readable is left alone, so a model change costs the
-     * filter rather than the feed.
+     * <p>Finds the edge list by type and filters it in place, so the cursor and the dist the
+     * mapper reads off the same response are left exactly as they arrived. Edges that are not
+     * posts are kept rather than dropped, and a response where no post was recognised at all is
+     * left alone, so a model change costs the filter rather than the feed.
      *
      * @param response The feed response about to be mapped.
      */
@@ -101,45 +108,107 @@ public final class NsfwFeedModePatch {
                     continue;
                 }
 
-                List<Object> keep = new ArrayList<>(edges.size());
-                int classified = 0;
-
-                for (Object edge : edges) {
-                    NsfwCellScanner.Scan scan = NsfwCellScanner.scan(edge);
-                    if (scan == null) {
-                        // Not a post - a carousel, an ad unit, an announcement. Leave it.
-                        keep.add(edge);
-                        continue;
-                    }
-                    classified++;
-                    if (scan.nsfw) {
-                        keep.add(edge);
-                    }
-                }
-
-                if (classified == 0) {
-                    if (reportedSources.add("unreadable-home")) {
-                        Utils.showToastLong("NSFW mode (home): could not read any post, "
-                                + "feed left unfiltered");
-                        Logger.printInfo(() -> "NSFW mode: no readable posts in the home response");
-                    }
-                    return;
-                }
-
-                int before = edges.size();
-                edges.clear();
-                edges.addAll(keep);
-
-                if (reportedSources.add("home")) {
-                    Utils.showToastShort("NSFW mode (home): kept " + keep.size()
-                            + " of " + before + " posts");
-                }
-                Logger.printDebug(() -> "NSFW mode: home feed kept " + keep.size() + " posts");
+                filterEdges(edges);
                 return;
             }
         } catch (Exception ex) {
             Logger.printException(() -> "filterHomeFeedResponse failure", ex);
         }
+    }
+
+    private static void filterEdges(List<Object> edges) {
+        int page = pagesSeen.incrementAndGet();
+        // The first page pays for a full walk of every edge so the tags it carried can be named
+        // in the diagnostic toast. Later pages stop as soon as they have their answer.
+        java.util.Set<String> tags = page == 1
+                ? java.util.Collections.synchronizedSet(new java.util.TreeSet<String>())
+                : null;
+
+        List<Object> keep = new ArrayList<>(edges.size());
+        Object lastPost = null;
+        int posts = 0;
+        int kept = 0;
+
+        for (Object edge : edges) {
+            NsfwCellScanner.Scan scan = NsfwCellScanner.scan(edge, tags);
+            if (scan == null) {
+                // Not a post - a carousel, an ad unit, an announcement. Leave it.
+                keep.add(edge);
+                continue;
+            }
+            posts++;
+            lastPost = edge;
+            if (scan.nsfw) {
+                keep.add(edge);
+                kept++;
+            }
+        }
+
+        if (posts == 0) {
+            // Not one edge was recognised as a post, which means the response shape changed
+            // rather than that this page happens to hold none. Fail open: an unfiltered feed is
+            // a far better failure than an empty one.
+            if (reportedSources.add("unreadable-home")) {
+                Utils.showToastLong("NSFW mode: no post was recognised in the home response, "
+                        + "feed left unfiltered");
+                Logger.printInfo(() -> "NSFW mode: no readable posts in the home response");
+            }
+            return;
+        }
+
+        // A page filtered down to no posts at all leaves the feed with nothing to draw and
+        // nothing to scroll, which reads on screen as a spinner that never resolves. Keeping one
+        // post back costs a single SFW post and lets the feed page on to where the 18+ ones are.
+        boolean padded = false;
+        if (kept == 0) {
+            keep.add(lastPost);
+            padded = true;
+        }
+
+        edges.clear();
+        edges.addAll(keep);
+
+        final int keptPosts = kept;
+        final int totalPosts = posts;
+        Logger.printDebug(() -> "NSFW mode: home page " + page + " kept "
+                + keptPosts + " of " + totalPosts + " posts");
+
+        // Temporary, and deliberately noisy for the first few pages: on-device is the only place
+        // the answer to "did it read the tags" actually exists.
+        if (page <= DIAGNOSTIC_PAGES) {
+            StringBuilder message = new StringBuilder("NSFW mode: page ").append(page)
+                    .append(" kept ").append(kept).append(" of ").append(posts).append(" posts");
+            if (padded) {
+                message.append(" (+1 held back so the feed can page on)");
+            }
+            if (tags != null) {
+                message.append("\ntags seen: ").append(describe(tags));
+            }
+            Utils.showToastLong(message.toString());
+        }
+    }
+
+    /**
+     * @return A short, readable list of the tags a page carried, for the diagnostic toast.
+     */
+    private static String describe(java.util.Set<String> tags) {
+        if (tags.isEmpty()) {
+            return "none";
+        }
+        StringBuilder text = new StringBuilder();
+        int shown = 0;
+        for (String tag : tags) {
+            if (shown == DIAGNOSTIC_TAGS) {
+                text.append(", +").append(tags.size() - shown).append(" more");
+                break;
+            }
+            if (shown > 0) {
+                text.append(", ");
+            }
+            text.append(tag);
+            shown++;
+        }
+        return text.toString();
     }
 
     /**
