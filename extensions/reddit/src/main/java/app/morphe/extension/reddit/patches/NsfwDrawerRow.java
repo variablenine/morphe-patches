@@ -20,9 +20,9 @@ import app.morphe.extension.shared.Utils;
  * {@link DrawerRowCloner} without naming the row class, which is obfuscated and renamed every
  * release.
  *
- * <p>{@link #diagnostic()} reports how far this got. The row has no reliable channel of its own
- * when it fails to appear - it simply is not there - so the diagnostic is surfaced through the
- * feed filter's toast instead of leaving the failing stage to guesswork.
+ * <p>How far the injection got is logged rather than shown. The row has no channel of its own
+ * when it fails to appear - it simply is not there - so the log line is the only account of which
+ * stage gave up.
  *
  * <p>Note on why this toggles a filter instead of opening a mature feed: Reddit's
  * {@code FeedType} and {@code ListingType} both carry a MATURE entry, but the app ships no mature
@@ -55,18 +55,8 @@ public final class NsfwDrawerRow {
     private static volatile int popularTitleId = UNRESOLVED;
     private static volatile int nsfwTitleId = UNRESOLVED;
 
-    /** How far the row injection got, for on-device diagnosis. */
+    /** How far the row injection got, for the log. */
     private static volatile String rowDiagnostic = "row hook never ran";
-
-    /**
-     * How many drawer taps the click hook has seen. Distinguishes "the click hook was never
-     * applied" from "it runs but did not recognise the row", which look identical from the
-     * outside: in both cases tapping does nothing.
-     */
-    private static final java.util.concurrent.atomic.AtomicInteger tapsSeen =
-            new java.util.concurrent.atomic.AtomicInteger();
-
-    private static volatile boolean explainedFallback;
 
     private NsfwDrawerRow() {
     }
@@ -76,13 +66,6 @@ public final class NsfwDrawerRow {
      */
     public static boolean isPatchIncluded() {
         return false;  // Modified during patching.
-    }
-
-    /**
-     * @return How far the drawer injection got, for on-device diagnosis.
-     */
-    public static String diagnostic() {
-        return rowDiagnostic + ", taps seen " + tapsSeen.get();
     }
 
     /**
@@ -156,7 +139,6 @@ public final class NsfwDrawerRow {
      */
     public static boolean onDrawerActionDispatched(Object presenter, Object action) {
         try {
-            tapsSeen.incrementAndGet();
 
             int nsfwId = nsfwTitleId();
             if (presenter == null || action == null || nsfwId == 0) {
@@ -230,16 +212,8 @@ public final class NsfwDrawerRow {
             boolean enabled = !Settings.NSFW_FEED_MODE.get();
             Settings.NSFW_FEED_MODE.save(enabled);
 
-            if (enabled) {
-                Utils.showToastShort("NSFW mode ON - refresh the feed");
-                if (!explainedFallback) {
-                    explainedFallback = true;
-                    Utils.showToastLong("Filtering the feed to 18+ posts. "
-                            + "This app build has no mature feed to open");
-                }
-            } else {
-                Utils.showToastShort("NSFW mode OFF - refresh the feed");
-            }
+            Utils.showToastShort(enabled ? "NSFW mode on" : "NSFW mode off");
+            NsfwFeedRefresher.refreshHomeFeed();
 
             return true;
         } catch (Exception ex) {
@@ -249,11 +223,13 @@ public final class NsfwDrawerRow {
     }
 
     /**
-     * Records a diagnostic, without overwriting a success from an earlier drawer build.
+     * Records how far the injection got, without overwriting a success from an earlier drawer
+     * build, and logs it.
      */
     private static void setDiagnostic(String message) {
         if (!"row added".equals(rowDiagnostic)) {
             rowDiagnostic = message;
+            Logger.printInfo(() -> "NSFW drawer row: " + message);
         }
     }
 
