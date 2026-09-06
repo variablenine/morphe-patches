@@ -56,7 +56,15 @@ public final class NsfwDrawerRow {
     private static volatile int nsfwTitleId = UNRESOLVED;
 
     /** How far the row injection got, for on-device diagnosis. */
-    private static volatile String diagnostic = "hook never ran";
+    private static volatile String rowDiagnostic = "row hook never ran";
+
+    /**
+     * How many drawer taps the click hook has seen. Distinguishes "the click hook was never
+     * applied" from "it runs but did not recognise the row", which look identical from the
+     * outside: in both cases tapping does nothing.
+     */
+    private static final java.util.concurrent.atomic.AtomicInteger tapsSeen =
+            new java.util.concurrent.atomic.AtomicInteger();
 
     private static volatile boolean explainedFallback;
 
@@ -71,10 +79,10 @@ public final class NsfwDrawerRow {
     }
 
     /**
-     * @return How far the drawer row injection got.
+     * @return How far the drawer injection got, for on-device diagnosis.
      */
     public static String diagnostic() {
-        return diagnostic;
+        return rowDiagnostic + ", taps seen " + tapsSeen.get();
     }
 
     /**
@@ -115,7 +123,7 @@ public final class NsfwDrawerRow {
                     return items;
                 }
 
-                diagnostic = "added";
+                rowDiagnostic = "row added";
                 Logger.printDebug(() -> "NSFW mode: added drawer row after Popular");
 
                 List<Object> augmented = new ArrayList<>(items.size() + 1);
@@ -148,6 +156,8 @@ public final class NsfwDrawerRow {
      */
     public static boolean onDrawerActionDispatched(Object presenter, Object action) {
         try {
+            tapsSeen.incrementAndGet();
+
             int nsfwId = nsfwTitleId();
             if (presenter == null || action == null || nsfwId == 0) {
                 return false;
@@ -242,8 +252,8 @@ public final class NsfwDrawerRow {
      * Records a diagnostic, without overwriting a success from an earlier drawer build.
      */
     private static void setDiagnostic(String message) {
-        if (!"added".equals(diagnostic)) {
-            diagnostic = message;
+        if (!"row added".equals(rowDiagnostic)) {
+            rowDiagnostic = message;
         }
     }
 
