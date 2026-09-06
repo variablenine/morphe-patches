@@ -59,3 +59,44 @@ Adding a **third home tab** is tractable — new `HomePagerScreenTab` subclass, 
 list `l()` receives, extend `l()`'s branch, and give the pager a screen for it — but it is a
 different, larger change than adding a row to an existing menu, and it needs the target version
 pinned first.
+
+## The target UI is the navigation drawer, not a tab row
+
+A screenshot from the user's own install shows the left nav drawer: **Popular**, **Latest**,
+then a divider, then *Discover communities*, *Start a community*, then the `Games on Reddit`,
+`Recently Visited`, `Favorites` and `Moderating` sections. "The feed dropdown menu" means this
+drawer, and "next to Popular" means a new row under Popular/Latest.
+
+This is a surface the fork already reaches. `hideSidebarComponentsPatch` hooks
+`CommunityDrawerBuilderFingerprint` — a static method taking a `Collection` of drawer items —
+and `HideSidebarComponentsPatch.hideComponents(Collection, HeaderItemInterface)` returns a
+replacement collection. Adding a row is the same hook used to *add* rather than *drop*.
+
+Note `HeaderItem` (the enum that patch filters on: ABOUT, COMMUNITIES, FAVORITES,
+GAMES_ON_REDDIT, MODERATING, RECENTLY_VISITED, REDDIT_PRO, RESOURCES) covers the *section
+headers* only. Popular/Latest are top-level rows built elsewhere;
+`com.reddit.screens.drawer.community.CommunityDrawerPresenter` (largely unobfuscated method
+names — `handleGenericItemClicked`, `handleCtaItemClicked`, `handlePredefinedItemFavUnfavClicked`,
+`loadAboutDrawerItems`) is where they are assembled and where their clicks are routed.
+`GenericPredefinedUiModelType` is **not** it — that enum holds only `CUSTOM_FEEDS`.
+
+## Reddit has a first-class MATURE feed
+
+Both feed enums carry a mature entry:
+
+- `com.reddit.feeds.data.FeedType`: `NEWS, HOME, POPULAR, LATEST, MATURE, SUBREDDIT,
+  COMMUNITIES, TOPIC, ALL, CUSTOM, SAVED_POSTS, ARENA, GAMES, CLUB, CATEGORY,
+  CONTRIBUTION_COPILOT, DYNAMIC, INTERESTS, FOLLOWING`
+- `com.reddit.listing.common.ListingType`: `HOME, POPULAR, LATEST, MATURE, ...`
+
+`MATURE` is live, not dead code: it appears in the generated `WhenMappings` ordinal tables
+(`defpackage.api`, `defpackage.bpi`) beside HOME/POPULAR/LATEST, `defpackage.zfi` branches on
+`feedType == FeedType.MATURE` for post navigation, and `com.reddit.feeds.impl.ui.h` treats
+`{POPULAR, MATURE}` as one set when deciding overflow-menu behaviour.
+
+That reframes the feature. Instead of client-side filtering of the home feed, NSFW mode could be
+a drawer row that opens Reddit's **own** mature feed — the app already knows how to render it,
+and the result is a real paginated feed rather than a thinned-out Home. Open questions before
+committing to that: which navigator builds a feed screen from a `FeedType` (several
+`defpackage` classes take a `FeedType` parameter), and whether the mature listing endpoint still
+returns anything server-side for an account with 18+ browsing enabled.
