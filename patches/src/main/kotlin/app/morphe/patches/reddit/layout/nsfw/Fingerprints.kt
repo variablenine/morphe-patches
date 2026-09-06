@@ -1,50 +1,18 @@
 package app.morphe.patches.reddit.layout.nsfw
 
 import app.morphe.patcher.Fingerprint
-import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
 import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.newInstance
-import app.morphe.patcher.opcode
 import app.morphe.patcher.parametersMatch
 import com.android.tools.smali.dexlib2.AccessFlags
-import com.android.tools.smali.dexlib2.Opcode
-
-/**
- * The constructor of the model a feed page is deserialized into, matched on the writes of its
- * own fields. The first match is the write of the post list, which is what NSFW mode filters.
- *
- * This deliberately does not reuse the identical fingerprint of the 'Hide ads' patch: a
- * [Fingerprint] caches its match, so a shared instance would hand the second patch to run
- * instruction indices that the first patch had already shifted. Two separate instances each
- * match the method as it stands when their own patch executes, so the two filters chain
- * safely no matter which order the patches are applied in.
- */
-internal object NsfwListingFingerprint : Fingerprint(
-    definingClass = "Lcom/reddit/domain/model/listing/Listing;",
-    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.CONSTRUCTOR),
-    filters = listOf(
-        fieldAccess(
-            opcode = Opcode.IPUT_OBJECT,
-            smali = "Lcom/reddit/domain/model/listing/Listing;->children:Ljava/util/List;"
-        ),
-        fieldAccess(
-            opcode = Opcode.IPUT_OBJECT,
-            smali = "Lcom/reddit/domain/model/listing/Listing;->after:Ljava/lang/String;"
-        ),
-        fieldAccess(
-            opcode = Opcode.IPUT_OBJECT,
-            smali = "Lcom/reddit/domain/model/listing/Listing;->before:Ljava/lang/String;"
-        )
-    )
-)
 
 /**
  * The static helper that turns one drawer section into rows. Deliberately a separate instance
- * from the identical fingerprint in the 'Hide sidebar components' patch, for the same reason
- * [NsfwListingFingerprint] is separate from the ads one: a shared instance would hand the second
- * patch to run indices the first had already shifted. Both inject at the head of this method and
- * chain in either order, one dropping sections and the other appending a row.
+ * from the identical fingerprint in the 'Hide sidebar components' patch: a [Fingerprint] caches
+ * its match, so a shared instance would hand the second patch to run indices the first had
+ * already shifted. Both inject at the head of this method and chain in either order, one
+ * dropping sections and the other appending a row.
  */
 private object DrawerSectionBuilderParentFingerprint : Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
@@ -93,30 +61,6 @@ internal object NsfwDrawerSectionFingerprint : Fingerprint(
 )
 
 /**
- * Where the modern feed turns a listing of posts into feed elements.
- *
- * This is the hook that matters. `Listing` carries `Link` objects with their `over18` flag, but
- * on-device testing showed emptying `Listing.children` leaves the rendered feed untouched: that
- * model is the cache path (Reddit's own Room schema calls its tables `listing` and `link`).
- * Posts reach the screen through this mapper instead, whatever fetched them, and its list really
- * is `List<Link>` - the method body casts each element to `com.reddit.domain.model.Link`.
- *
- * Anchored on the suspend continuation class, whose name Reddit does not obfuscate, so the match
- * does not depend on the enclosing class or method keeping their names.
- */
-internal object NsfwFeedElementMapperFingerprint : Fingerprint(
-    returnType = "Ljava/lang/Object;",
-    filters = listOf(
-        newInstance(
-            type = $$"Lcom/reddit/feeds/impl/data/mapper/link/RedditListingFeedElementMapper$getFeedElements$1;"
-        )
-    ),
-    custom = { method, _ ->
-        method.parameters.any { it.startsWith("Ljava/util/List;") }
-    }
-)
-
-/**
  * The drawer's click router.
  *
  * The previous anchor here assumed the tapped row was fetched from a map and cast, which is how
@@ -139,14 +83,29 @@ internal object NsfwDrawerItemClickFingerprint : Fingerprint(
 )
 
 /**
+ * The feed view model, captured as it is built so the mode switch can reload the home feed.
+ *
+ * Reddit does not obfuscate this class, and it declares exactly one constructor, so no signature
+ * is needed to pin it. Everything the extension needs is reachable from the instance by shape:
+ * a `com.reddit.feeds.data.FeedType` field says which feed it is, and the pager is the field
+ * whose class takes a `com.reddit.feeds.ui.events.FeedRefreshType`.
+ */
+internal object NsfwFeedViewModelFingerprint : Fingerprint(
+    definingClass = "Lcom/reddit/feeds/impl/ui/RedditFeedViewModel;",
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.CONSTRUCTOR)
+)
+
+/**
  * The home feed's page builder: it takes the GraphQL response, walks its edges into feed
  * elements, and returns a page.
  *
- * This is the only one of the three feed hooks that reaches the home feed. The listing model is
- * the cache path, and `RedditListingFeedElementMapper.getFeedElements` turned out to have exactly
- * one real caller - the History feed. Filtering the response's edges here, before they become
- * elements, is also the only place a post's NSFW state is still visible: the elements themselves
- * carry only a link id, a unique id, an "is promoted" flag and an identifier.
+ * This is the patch's only feed hook. Two earlier ones were dropped: the `Listing` model is the
+ * cache path shared by every screen that reads a listing, and `RedditListingFeedElementMapper`
+ * `.getFeedElements` has exactly one real caller - the History feed. Neither reaches the home
+ * feed, and both could empty an unrelated screen. Filtering the response's edges here, before
+ * they become elements, is also the only place a post's NSFW state is still visible: the
+ * elements themselves carry only a link id, a unique id, an "is promoted" flag and an
+ * identifier.
  *
  * Anchored on the package (Reddit does not obfuscate `com/reddit/feeds/home/impl/data/paging/`)
  * plus the two unobfuscated enum constants the method reads, which pin it precisely.

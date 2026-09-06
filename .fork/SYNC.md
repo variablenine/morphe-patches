@@ -16,7 +16,7 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-32 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+31 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
 
 **Feature: Hide brainrot comments (YouTube)**
@@ -48,12 +48,10 @@ patch no longer applies cleanly):
 
 | File | Change |
 |---|---|
-| `extensions/reddit/.../nsfw/NsfwPostDetector.java` | **New file.** Android-free core. Reflectively finds a zero-arg `boolean`/`Boolean` NSFW accessor on a feed item (`getOver18` first, after Reddit's own `over_18` JSON field, then fallbacks), else unwraps the item (`getLink`, `getPost`, ...) up to 2 levels. Reports `NSFW`/`SFW`/`UNKNOWN` and never guesses. Reflection is deliberate: compiling against one guessed model signature would throw `NoSuchMethodError` the moment Reddit reshapes the model. |
-| `extensions/reddit/.../patches/NsfwFeedModePatch.java` | **New file.** `filterListing(List)` injection point. Reads `Settings.NSFW_FEED_MODE` live (it is a mode, not a startup flag). Fails open when a listing yields zero classified items, so a model change leaves the feed unfiltered instead of empty. |
-| `extensions/reddit/src/test/.../nsfw/NsfwPostDetectorSelfTest.java` | **New file.** Plain-javac self-test; must print `35 passed, 0 failed`. |
-| `patches/.../reddit/layout/nsfw/Fingerprints.kt` (feed) | `NsfwFeedElementMapperFingerprint` targets `RedditListingFeedElementMapper.getFeedElements(List<Link>, FeedLayout, Continuation)` via its **unobfuscated** continuation class `RedditListingFeedElementMapper$getFeedElements$1`. This is the hook that reaches the screen; the `Listing` one is the cache path (device-proven: it filtered a listing to empty while the feed carried on). |
-| `patches/.../reddit/layout/nsfw/Fingerprints.kt` | **New file.** `NsfwListingFingerprint`, a deliberate duplicate of `ad/ListingFingerprint` (`Lcom/reddit/domain/model/listing/Listing;-><init>`, matched on the `children`/`after`/`before` field writes). Must stay a **separate instance**: a `Fingerprint` caches its match, so sharing one with `Hide ads` would hand the second patch stale instruction indices. Keep it in sync with upstream's copy on every sync. |
-| `patches/.../reddit/layout/nsfw/NsfwFeedModePatch.kt` | **New file.** Inserts `filterListing` ahead of the `children` field write — the same anchor `Hide ads` uses, which is safe because the two fingerprints are separate instances and the filters chain in either order. |
+| `extensions/reddit/.../patches/NsfwFeedModePatch.java` | **New file.** `filterHomeFeedResponse(Object)` injection point, and nothing else. Reads `Settings.NSFW_FEED_MODE` live (it is a mode, not a startup flag). Fails open when no edge is recognised as a post, so a model change leaves the feed unfiltered instead of empty, and holds one post back when a page would otherwise be left with nothing to draw. |
+| `patches/.../reddit/layout/nsfw/Fingerprints.kt` | **New file.** `NsfwHomeFeedPageFingerprint` (the home feed's page builder), `NsfwFeedViewModelFingerprint` (`RedditFeedViewModel.<init>`), and the two drawer fingerprints. **Two earlier feed hooks were removed and must not come back**: `Listing.<init>` is the cache path shared by every screen that reads a listing — subreddits, saved posts, search, profiles — and `RedditListingFeedElementMapper.getFeedElements` serves only the History feed. Neither reaches the home feed and both could empty an unrelated screen. |
+| `patches/.../reddit/layout/nsfw/NsfwFeedModePatch.kt` | **New file.** Inserts `filterHomeFeedResponse` at the head of the home page builder, `captureFeedViewModel` at the tail of the feed view model's constructor, and the two drawer hooks. Everything but the first is wrapped in `try`/`catch`. |
+| `extensions/reddit/.../patches/NsfwFeedRefresher.java` | **New file.** Reloads the home feed when the mode is switched, so it takes effect where the user switched it. Holds captured view models **weakly**, picks the home one out by a field holding an enum constant named `HOME` on a `*FeedType`, and drives the pager through the field whose class declares a one-argument method taking a `*FeedRefreshType` — invoked with `PULL_TO_REFRESH` on the main thread. All by shape; failure is silent and costs a pull-down. |
 | `extensions/reddit/.../settings/Settings.java` | Add `NSFW_FEED_MODE = new BooleanSetting("morphe_nsfw_feed_mode", FALSE)` in its own `// NSFW mode` region. Two-arg constructor on purpose: no app restart needed. |
 | `extensions/reddit/.../preference/categories/NsfwPreferenceCategory.java` | **New file.** Mirrors `AdsPreferenceCategory`. |
 | `extensions/reddit/.../preference/RedditPreferenceFragment.java` | Construct `NsfwPreferenceCategory` after `AdsPreferenceCategory`, plus its import. |
@@ -61,7 +59,7 @@ patch no longer applies cleanly):
 | `extensions/reddit/src/test/.../nsfw/NsfwCellScannerSelfTest.java` | **New file.** Plain-javac self-test; must print `19 passed, 0 failed`. Builds an edge with the real feed's nine-level shape, so a walk that is too shallow to reach the indicators fails the test rather than the feed. |
 | `extensions/reddit/.../nsfw/DrawerRowCloner.java` | **New file.** Android-free. Clones a drawer row with a different title resource without naming its class: matches a constructor whose parameter count equals the row's field count, fills it by type, and then **verifies** the result field by field — the title's own field must hold the new id and every other int must be unchanged — retrying with the title in each int slot. Checking only that the new id appears *somewhere* is not enough; that passes a clone with the title and icon swapped, which is exactly the bug the self-test caught. |
 | `extensions/reddit/src/test/.../nsfw/DrawerRowClonerSelfTest.java` | **New file.** Plain-javac self-test; must print `19 passed, 0 failed`. Covers reordered fields, reordered constructor parameters, extra and null reference fields, single-int rows, and refusals. |
-| `extensions/reddit/.../patches/NsfwDrawerRow.java` | **New file.** Adds an NSFW row to the navigation drawer under Reddit's Popular row, and toggles NSFW mode on tap. Builds the row by **cloning** the Popular row reflectively — the row type is obfuscated and renamed every release, but its shape `(boolean, int titleRes, int iconRes, long uniqueId)` is stable — and identifies Popular by looking up the `popular_feed_label` string id at runtime, which also disambiguates the title int from the icon int. All reflective and wrapped: a shape change costs the row, not the app. |
+| `extensions/reddit/.../patches/NsfwDrawerRow.java` | **New file.** Adds an NSFW row to the navigation drawer under Reddit's Popular row; a tap toggles NSFW mode, shows one short toast and asks `NsfwFeedRefresher` to reload the home feed. Builds the row by **cloning** the Popular row reflectively — the row type is obfuscated and renamed every release, but its shape `(boolean, int titleRes, int iconRes, long uniqueId)` is stable — and identifies Popular by looking up the `popular_feed_label` string id at runtime, which also disambiguates the title int from the icon int. All reflective and wrapped: a shape change costs the row, not the app. |
 | `patches/src/main/resources/addresources/values/reddit/strings.xml` | Add `morphe_screen_nsfw_title`, `morphe_nsfw_feed_mode_{title,summary}` and `morphe_nsfw_feed_mode_row_title`. Only the default `values/` locale — Crowdin fills the rest. |
 
 The drawer hooks live in the same patch but are wrapped in `try`/`catch`: the drawer is far more
@@ -115,7 +113,6 @@ Known limitation to preserve on sync: the hook is the `Listing` model, so it cov
    the `.rej` hunks manually using the semantics table above (upstream may have refactored the touched
    files). **Regenerate `.fork/upstream-delta.patch`** against the new tree afterwards so the next sync
    starts clean.
-5. Verify locally: run the self-tests with plain `javac`/`java` (BrainrotDetectorSelfTest 27/27, AlternatingTapUnlockSelfTest 11/11, NsfwPostDetectorSelfTest 35/35, DrawerRowClonerSelfTest 19/19, NsfwCellScannerSelfTest 19/19).
 6. Update the state markers in this file. Commit everything as
    `bump: Sync upstream Morphe patches vX.Y.Z` (the `bump:` type produces a patch release), push to `dev`.
    If the push to `dev` is rejected with 403 / a branch restriction, see **Automation (routine) setup**

@@ -2,14 +2,11 @@ package app.morphe.patches.reddit.layout.nsfw
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.reddit.misc.settings.settingsPatch
 import app.morphe.patches.reddit.shared.Constants.COMPATIBILITY_REDDIT
 import app.morphe.util.findFreeRegister
 import app.morphe.util.setExtensionIsPatchIncluded
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
-import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import java.util.logging.Logger
 
 private const val EXTENSION_CLASS =
@@ -18,37 +15,22 @@ private const val EXTENSION_CLASS =
 private const val DRAWER_EXTENSION_CLASS =
     "Lapp/morphe/extension/reddit/patches/NsfwDrawerRow;"
 
+private const val REFRESH_EXTENSION_CLASS =
+    "Lapp/morphe/extension/reddit/patches/NsfwFeedRefresher;"
+
 @Suppress("unused")
 val nsfwFeedModePatch = bytecodePatch(
     name = "NSFW mode",
-    description = "Adds an option that hides everything except NSFW (18+) posts from the feed. " +
-            "Turned off until it is enabled in Morphe settings. " +
-            "Reddit only sends 18+ posts to accounts that have 'Show NSFW content' enabled, " +
-            "so the feed is empty without that account setting."
+    description = "Adds an NSFW row to the navigation drawer that reduces the home feed to " +
+            "its 18+ posts. Turned off until it is switched on. Reddit only sends 18+ posts to " +
+            "accounts that have 'Show NSFW content' enabled, so the feed is empty without that " +
+            "account setting."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)
 
     dependsOn(settingsPatch)
 
     execute {
-        // Filter the posts where the feed page is built, which is the same place
-        // 'Hide ads' removes promoted posts from. Both patches insert ahead of the
-        // same field write, and chain in whichever order they are applied.
-        NsfwListingFingerprint.let {
-            it.method.apply {
-                val index = it.instructionMatches.first().index
-                val register = getInstruction<TwoRegisterInstruction>(index).registerA
-
-                addInstructions(
-                    index,
-                    """
-                        invoke-static/range { v$register .. v$register }, $EXTENSION_CLASS->filterListing(Ljava/util/List;)Ljava/util/List;
-                        move-result-object v$register
-                    """
-                )
-            }
-        }
-
         setExtensionIsPatchIncluded(EXTENSION_CLASS)
 
         // region Home feed
@@ -71,28 +53,25 @@ val nsfwFeedModePatch = bytecodePatch(
 
         // endregion
 
-        // region Modern feed
+        // region Feed refresh
 
-        // The listing hook above is the cache path: on device it filters a listing to nothing
-        // while the rendered feed carries on unchanged. Posts reach the screen through this
-        // mapper, so this is the hook that actually filters what is on screen.
+        // Switching the mode has to reload the feed, since what is on screen was filtered under
+        // the old one. Capturing a feed view model as it is built is the only handle on the
+        // app's own refresh; the extension picks the home one out and drives it by shape.
         try {
-            NsfwFeedElementMapperFingerprint.method.apply {
-                val listParameter = parameterTypes.indexOfFirst { it == "Ljava/util/List;" }
-                // Instance method, so parameter n is register p(n + 1).
-                val register = "p${listParameter + 1}"
-
+            NsfwFeedViewModelFingerprint.method.apply {
                 addInstructions(
-                    0,
+                    implementation!!.instructions.size - 1,
                     """
-                        invoke-static/range { $register .. $register }, $EXTENSION_CLASS->filterFeedLinks(Ljava/util/List;)Ljava/util/List;
-                        move-result-object $register
+                        invoke-static/range { p0 .. p0 }, $REFRESH_EXTENSION_CLASS->captureFeedViewModel(Ljava/lang/Object;)V
                     """
                 )
             }
+
+            setExtensionIsPatchIncluded(REFRESH_EXTENSION_CLASS)
         } catch (ex: Exception) {
             Logger.getLogger(this::class.java.name).warning(
-                "'NSFW mode' could not hook the feed element mapper: ${ex.message}"
+                "'NSFW mode' could not hook the feed view model: ${ex.message}"
             )
         }
 
