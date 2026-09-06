@@ -384,3 +384,31 @@ this build.
 
 Reddit's own NSFW colour is `#ff585b`, identical across every theme (`alienblue_nsfw`,
 `midnight_nsfw`, `mint_nsfw`, `night_nsfw`, ...).
+
+
+## The home feed is not only posts
+
+`ep1.z40` (the feed element Node) has **22** alternative fragments, and only a few of them are
+posts:
+
+```
+onCellGroupFragment          <- a post
+postPreviewComponentFragment  onboardingInFeedFragment      topicPickerFeedElement
+amaCarouselFragment           carouselCommunityRecommendationsFragment
+listStyleCommunityRecommendationsFragment   compactPostCommunityRecommendationsFragment
+cardPostCommunityRecommendationsFragment    chatChannelFeedUnitFragment
+chatChannelsFeedUnitFragment  taxonomyTopicsFeedElementFragment
+exploreFeaturedItemsFragment  topicPillsGroupFragment       rankedCommunityFragment
+postCarouselFragment          storyClusterCarouselFragment  linearPostCardFragment
+theaterPostCardFragment       profileVisibilityBannerFragment
+profileNoContentBannerFragment
+```
+
+None of the recommendation, chat, topic or explore units carries a `t3_` id - they reference
+subreddits (`t5_`), topics and channels - so the scanner returns null for them. The filter used
+to read null as "not a post, leave it alone", which meant every community recommendation
+carousel, chat channel unit and topic pill row stayed in a feed that was supposed to hold 18+
+posts only. That is what "SFW posts still making it through" was. They are dropped now.
+
+The page-level fail-open still stands and is what it was always for: if **no** edge on a page
+carries a post id at all, the response shape has changed, and the page is left alone.
