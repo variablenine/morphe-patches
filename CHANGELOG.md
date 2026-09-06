@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/variablenine/morphe-patches/compare/v1.2.3...v1.3.0) (2026-09-06)
+
+### ✨ New Features
+
+* Filter the home feed on its GraphQL cells ([bc2b762](https://github.com/variablenine/morphe-patches/commit/bc2b762b3a0b59c28ac329b93eb579c785a125da))
+
 ## [1.2.3](https://github.com/variablenine/morphe-patches/compare/v1.2.2...v1.2.3) (2026-09-06)
 
 ### 🐛 Bug Fixes
