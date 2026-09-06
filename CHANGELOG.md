@@ -1,3 +1,10 @@
+## [1.2.0](https://github.com/variablenine/morphe-patches/compare/v1.1.9...v1.2.0) (2026-09-06)
+
+### ✨ New Features
+
+* Add an NSFW row to the Reddit navigation drawer ([b245392](https://github.com/variablenine/morphe-patches/commit/b245392a3bd08177b4ab9901eefacd192bc972dd))
+* Add NSFW mode for Reddit ([e2608d4](https://github.com/variablenine/morphe-patches/commit/e2608d4cc8ce1304327e3c3d23a2235807559ffb))
+
 ## [1.1.9](https://github.com/variablenine/morphe-patches/compare/v1.1.8...v1.1.9) (2026-09-02)
 
 ### 🚀 Updated App Support
