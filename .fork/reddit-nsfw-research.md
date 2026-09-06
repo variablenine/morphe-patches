@@ -316,6 +316,14 @@ rather than the class, which covers both.
 The post id travels alongside as a `t3_` fullname. Both are read by shape rather than by field
 name, since every field on those fragments is renamed each release.
 
+The feed pipeline's own mirror of that flag confirms the route: the home feed maps the indicators
+cell into `com.reddit.feeds.model.IndicatorsElement` via
+`com.reddit.feeds.impl.data.mapper.gql.cells.IndicatorsCellDataMapper`, and
+`com.reddit.feeds.model.IndicatorType` carries the same five members
+(`APP, NSFW, ORIGINAL, QUARANTINED, SPOILER`). Neither name is obfuscated, so if the
+response-side filter ever stops finding the tag, filtering the **mapped** elements on
+`IndicatorType.NSFW` is the fallback hook - same information, one step further down the pipeline.
+
 **Depth is part of the answer.** An edge reaches its indicators through
 
 ```
