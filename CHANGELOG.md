@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/variablenine/morphe-patches/compare/v1.3.2...v1.4.0) (2026-09-06)
+
+### ✨ New Features
+
+* Mark NSFW mode on the home app bar ([611b810](https://github.com/variablenine/morphe-patches/commit/611b8108079459579ea3546853d692d07db26488))
+
 ## [1.3.2](https://github.com/variablenine/morphe-patches/compare/v1.3.1...v1.3.2) (2026-09-06)
 
 ### 🐛 Bug Fixes
