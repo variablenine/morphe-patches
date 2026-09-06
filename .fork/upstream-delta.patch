@@ -1,5 +1,5 @@
 diff --git a/.github/workflows/open_pull_request.yml b/.github/workflows/open_pull_request.yml
-index 2006f78c6..8cf51f879 100644
+index 2006f78c..8cf51f87 100644
 --- a/.github/workflows/open_pull_request.yml
 +++ b/.github/workflows/open_pull_request.yml
 @@ -9,6 +9,10 @@ on:
@@ -14,7 +14,7 @@ index 2006f78c6..8cf51f879 100644
    pull-request:
      name: Open pull request
 diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml
-index 4319c24ed..428edff4f 100644
+index 4319c24e..428edff4 100644
 --- a/.github/workflows/release.yml
 +++ b/.github/workflows/release.yml
 @@ -20,6 +20,8 @@ jobs:
@@ -87,7 +87,7 @@ index 4319c24ed..428edff4f 100644
 +      # out on every upstream sync (see .fork/SYNC.md).
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/DrawerRowCloner.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/DrawerRowCloner.java
 new file mode 100644
-index 000000000..7cebd8573
+index 00000000..7cebd857
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/DrawerRowCloner.java
 @@ -0,0 +1,266 @@
@@ -359,50 +359,67 @@ index 000000000..7cebd8573
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwCellScanner.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwCellScanner.java
 new file mode 100644
-index 000000000..9cde5f6f6
+index 00000000..700f2ffe
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwCellScanner.java
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,257 @@
 +package app.morphe.extension.reddit.nsfw;
 +
 +import java.lang.reflect.Field;
 +import java.lang.reflect.Modifier;
 +import java.util.ArrayList;
 +import java.util.Collection;
++import java.util.HashMap;
 +import java.util.IdentityHashMap;
 +import java.util.List;
 +import java.util.Map;
++import java.util.Set;
 +
 +/**
 + * Pure, Android-free core for reading a post's NSFW state out of Reddit's GraphQL cell models.
 + *
 + * <p>The modern home feed is built from GraphQL "cells", not from the {@code Link} domain model,
 + * and its feed elements carry only a link id, a unique id, an "is promoted" flag and an
-+ * identifier - no NSFW anywhere. The flag the app itself uses to draw the 18+ tag lives on the
-+ * metadata cell as a {@code statusIndicators} list of
-+ * {@code com.reddit.type.PostStatusIndicatorType}, whose {@code NSFW} constant is not obfuscated.
++ * identifier - no NSFW anywhere. The flag has to be read off the response instead, where the
++ * cells still carry their tags.
 + *
-+ * <p>Everything here is found by shape rather than by name, because every field on those
-+ * fragments is renamed each release:
++ * <p>Everything here is found by shape rather than by name, because every class and field on
++ * those fragments is renamed each release:
 + * <ul>
 + *   <li>the post id is the {@code String} field holding a {@code t3_} fullname, which is
 + *       self-validating - no other string on the fragment looks like one;</li>
-+ *   <li>the NSFW flag is an enum constant named {@code NSFW} on a type whose class name ends in
-+ *       {@code PostStatusIndicatorType}.</li>
++ *   <li>NSFW is an enum constant named {@code NSFW}. Reddit's schema spells it that way in more
++ *       than one enum - {@code CellIndicatorType.NSFW} on a post's indicators cell, and
++ *       {@code NSFWState.NSFW} elsewhere - so the constant name is matched rather than the type.
++ *       Enum constants are the one part of a GraphQL model R8 leaves alone, since their names go
++ *       over the wire.</li>
 + * </ul>
++ *
++ * <p>Depth matters here. An edge reaches its indicators through
++ * edge - node - cell group - group fragment - cells - cell - indicators cell - indicators, which
++ * is nine hops, so a shallow walk finds the post id and none of its tags: every post then reads
++ * as SFW and the feed empties. {@link #MAX_DEPTH} has margin over that path on purpose.
 + */
 +public final class NsfwCellScanner {
 +
 +    /** Reddit's fullname prefix for a post. */
 +    private static final String POST_ID_PREFIX = "t3_";
 +
-+    /** The unobfuscated GraphQL enum carrying a post's status tags. */
-+    private static final String STATUS_INDICATOR_TYPE = "PostStatusIndicatorType";
-+
++    /** The enum constant Reddit's schema uses for 18+ content. */
 +    private static final String NSFW_CONSTANT = "NSFW";
 +
-+    /** How deep to walk a fragment's object graph. Cells nest a few levels at most. */
-+    private static final int MAX_DEPTH = 4;
++    /**
++     * How deep to walk a fragment's object graph. The indicators of a home feed post sit nine
++     * hops from the edge; the rest is margin for a schema that grows another wrapper.
++     */
++    private static final int MAX_DEPTH = 12;
++
++    /**
++     * Readable instance fields per class. The walk visits the same few dozen fragment classes
++     * thousands of times per page, and {@link Class#getDeclaredFields()} allocates a fresh array
++     * on every call.
++     */
++    private static final Map<Class<?>, Field[]> fieldCache = new HashMap<>();
 +
 +    private NsfwCellScanner() {
 +    }
@@ -414,6 +431,19 @@ index 000000000..9cde5f6f6
 +     * @return The result, or null if this object carries no post id.
 +     */
 +    public static Scan scan(Object fragment) {
++        return scan(fragment, null);
++    }
++
++    /**
++     * Reads a post id and its NSFW state out of a GraphQL cell fragment.
++     *
++     * @param fragment    The fragment to scan.
++     * @param enumNamesOut If non-null, every enum constant met on the way is added to it as
++     *                     {@code SimpleType.CONSTANT}. Collecting them forces the whole graph to
++     *                     be walked, so pass null unless the names are actually wanted.
++     * @return The result, or null if this object carries no post id.
++     */
++    public static Scan scan(Object fragment, Set<String> enumNamesOut) {
 +        // Only a model object is a fragment. Refusing strings, numbers and collections at the
 +        // root keeps stray values out of the map, even though the walk would happily find a
 +        // t3_ id inside one.
@@ -422,33 +452,16 @@ index 000000000..9cde5f6f6
 +        }
 +
 +        Scan scan = new Scan();
++        scan.enumNames = enumNamesOut;
 +        walk(fragment, scan, 0, new IdentityHashMap<>());
 +        return scan.postId == null ? null : scan;
 +    }
 +
 +    /**
-+     * @return Whether an object is, or contains, the NSFW status indicator.
++     * @return Whether a value is the NSFW marker itself.
 +     */
 +    public static boolean isNsfwIndicator(Object value) {
-+        if (value == null) {
-+            return false;
-+        }
-+        Class<?> type = value.getClass();
-+        // Enum constants compile to a subclass when they carry a body, so walk up.
-+        while (type != null) {
-+            if (type.getName().endsWith(STATUS_INDICATOR_TYPE)) {
-+                return NSFW_CONSTANT.equals(nameOf(value));
-+            }
-+            type = type.getSuperclass();
-+        }
-+        return false;
-+    }
-+
-+    private static String nameOf(Object value) {
-+        if (value instanceof Enum) {
-+            return ((Enum<?>) value).name();
-+        }
-+        return String.valueOf(value);
++        return value instanceof Enum && NSFW_CONSTANT.equals(((Enum<?>) value).name());
 +    }
 +
 +    /**
@@ -461,45 +474,73 @@ index 000000000..9cde5f6f6
 +                || value instanceof Enum) {
 +            return false;
 +        }
-+        String className = value.getClass().getName();
-+        return !className.startsWith("java.") && !className.startsWith("kotlin.")
-+                && !className.startsWith("android.");
++        return !isFrameworkClass(value.getClass().getName());
 +    }
 +
-+    private static void walk(Object node, Scan scan, int depth, Map<Object, Boolean> seen) {
-+        if (node == null || depth > MAX_DEPTH || seen.put(node, Boolean.TRUE) != null) {
++    private static boolean isFrameworkClass(String className) {
++        return className.startsWith("java.") || className.startsWith("kotlin.")
++                || className.startsWith("android.") || className.startsWith("androidx.");
++    }
++
++    /**
++     * @param seen The depth each object was last walked at. A depth-limited walk has to allow a
++     *             second visit from a shallower path, or an object first met at the limit is
++     *             written off before its own children are ever looked at.
++     */
++    private static void walk(Object node, Scan scan, int depth, Map<Object, Integer> seen) {
++        if (node == null || depth > MAX_DEPTH || scan.done()) {
 +            return;
 +        }
 +
-+        if (node instanceof Collection) {
-+            for (Object item : (Collection<?>) node) {
-+                if (isNsfwIndicator(item)) {
-+                    scan.nsfw = true;
-+                } else {
-+                    walk(item, scan, depth + 1, seen);
-+                }
++        Integer previous = seen.put(node, depth);
++        if (previous != null && previous <= depth) {
++            return;
++        }
++
++        if (node instanceof Enum) {
++            String name = ((Enum<?>) node).name();
++            if (NSFW_CONSTANT.equals(name)) {
++                scan.nsfw = true;
 +            }
-+            return;
-+        }
-+
-+        if (isNsfwIndicator(node)) {
-+            scan.nsfw = true;
++            if (scan.enumNames != null && !isFrameworkClass(node.getClass().getName())) {
++                scan.enumNames.add(simpleName(node.getClass()) + "." + name);
++            }
 +            return;
 +        }
 +
 +        if (node instanceof CharSequence) {
 +            String text = node.toString();
-+            if (scan.postId == null && text.startsWith(POST_ID_PREFIX) && text.length() > POST_ID_PREFIX.length()) {
++            if (scan.postId == null && text.startsWith(POST_ID_PREFIX)
++                    && text.length() > POST_ID_PREFIX.length()) {
 +                scan.postId = text;
 +            }
 +            return;
 +        }
 +
++        if (node instanceof Collection) {
++            for (Object item : (Collection<?>) node) {
++                walk(item, scan, depth + 1, seen);
++            }
++            return;
++        }
++
++        if (node instanceof Map) {
++            for (Object item : ((Map<?, ?>) node).values()) {
++                walk(item, scan, depth + 1, seen);
++            }
++            return;
++        }
++
++        if (node instanceof Object[]) {
++            for (Object item : (Object[]) node) {
++                walk(item, scan, depth + 1, seen);
++            }
++            return;
++        }
++
 +        // Only walk Reddit's own models; anything else is framework noise.
-+        String className = node.getClass().getName();
-+        if (className.startsWith("java.") || className.startsWith("kotlin.")
-+                || className.startsWith("android.") || node instanceof Number
-+                || node instanceof Boolean) {
++        if (node instanceof Number || node instanceof Boolean
++                || isFrameworkClass(node.getClass().getName())) {
 +            return;
 +        }
 +
@@ -514,11 +555,28 @@ index 000000000..9cde5f6f6
 +        }
 +    }
 +
-+    private static List<Field> declaredFields(Class<?> type) {
++    private static String simpleName(Class<?> type) {
++        String name = type.getName();
++        int cut = Math.max(name.lastIndexOf('.'), name.lastIndexOf('$'));
++        return cut < 0 ? name : name.substring(cut + 1);
++    }
++
++    private static Field[] declaredFields(Class<?> type) {
++        synchronized (fieldCache) {
++            Field[] cached = fieldCache.get(type);
++            if (cached != null) {
++                return cached;
++            }
++        }
++
 +        List<Field> fields = new ArrayList<>();
 +        try {
 +            for (Field field : type.getDeclaredFields()) {
 +                if (Modifier.isStatic(field.getModifiers())) {
++                    continue;
++                }
++                if (field.getType().isPrimitive()) {
++                    // Nothing to walk into, and reading one boxes an object per post.
 +                    continue;
 +                }
 +                try {
@@ -531,7 +589,12 @@ index 000000000..9cde5f6f6
 +        } catch (Throwable ignored) {
 +            // Nothing readable.
 +        }
-+        return fields;
++
++        Field[] result = fields.toArray(new Field[0]);
++        synchronized (fieldCache) {
++            fieldCache.put(type, result);
++        }
++        return result;
 +    }
 +
 +    /**
@@ -541,13 +604,25 @@ index 000000000..9cde5f6f6
 +        /** The post's {@code t3_} fullname, or null if none was present. */
 +        public String postId;
 +
-+        /** Whether the fragment carried the NSFW status indicator. */
++        /** Whether the fragment carried the NSFW marker. */
 +        public boolean nsfw;
++
++        /** Where to collect the enum constants met, or null to collect none. */
++        Set<String> enumNames;
++
++        /**
++         * @return Whether there is nothing left to learn from this fragment. Only true once both
++         *         answers are in and no diagnostic is being collected, since a diagnostic wants
++         *         the whole graph.
++         */
++        boolean done() {
++            return nsfw && postId != null && enumNames == null;
++        }
 +    }
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java
 new file mode 100644
-index 000000000..49aaeaa86
+index 00000000..49aaeaa8
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/nsfw/NsfwPostDetector.java
 @@ -0,0 +1,304 @@
@@ -857,7 +932,7 @@ index 000000000..49aaeaa86
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
 new file mode 100644
-index 000000000..62438a9d0
+index 00000000..62438a9d
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
 @@ -0,0 +1,284 @@
@@ -1147,10 +1222,10 @@ index 000000000..62438a9d0
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
 new file mode 100644
-index 000000000..bc18c1f22
+index 00000000..be9a494e
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,289 @@
 +package app.morphe.extension.reddit.patches;
 +
 +import java.util.ArrayList;
@@ -1182,16 +1257,22 @@ index 000000000..bc18c1f22
 +public final class NsfwFeedModePatch {
 +
 +    /**
-+     * Whether the "no item was understood" warning has already been logged.
-+     * Only logged once, since this runs on every page of every feed.
-+     */
-+    /**
-+     * Whether the one-off diagnostic toast has been shown this app start. Temporary: it exists
-+     * to answer, on a real device, whether this listing hook is reached at all on a given Reddit
-+     * version - something no amount of decompiling settles. Remove once that is known.
++     * Which hooks have already reported themselves on screen this app start. Temporary: the
++     * toasts exist to answer, on a real device, which hooks a given Reddit version actually
++     * reaches - something no amount of decompiling settles. Remove once that is known.
 +     */
 +    private static final java.util.Set<String> reportedSources =
 +            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
++
++    /** How many home feed pages report their result on screen before the toasts stop. */
++    private static final int DIAGNOSTIC_PAGES = 3;
++
++    /** How many distinct tags the diagnostic toast names before it summarises the rest. */
++    private static final int DIAGNOSTIC_TAGS = 8;
++
++    /** How many home feed pages have been filtered this app start. */
++    private static final java.util.concurrent.atomic.AtomicInteger pagesSeen =
++            new java.util.concurrent.atomic.AtomicInteger();
 +
 +    /**
 +     * @return If this patch was included during patching.
@@ -1221,13 +1302,14 @@ index 000000000..bc18c1f22
 +     *
 +     * <p>This is the hook that reaches the home feed. The other two do not: the listing model is
 +     * the cache path, and the listing element mapper turned out to serve only the History feed.
-+     * The home feed is built from GraphQL cells whose elements carry no NSFW flag at all, so the
-+     * decision has to be made here, on the response, where the metadata cell still carries its
-+     * {@code statusIndicators}.
++     * The home feed is built from GraphQL cells whose feed elements carry no NSFW flag at all,
++     * so the decision has to be made here, on the response, where the post's indicators cell
++     * still carries its {@code CellIndicatorType.NSFW}.
 +     *
-+     * <p>Filters the edge list in place. Unreadable edges are kept rather than dropped, and a
-+     * response where nothing at all was readable is left alone, so a model change costs the
-+     * filter rather than the feed.
++     * <p>Finds the edge list by type and filters it in place, so the cursor and the dist the
++     * mapper reads off the same response are left exactly as they arrived. Edges that are not
++     * posts are kept rather than dropped, and a response where no post was recognised at all is
++     * left alone, so a model change costs the filter rather than the feed.
 +     *
 +     * @param response The feed response about to be mapped.
 +     */
@@ -1254,45 +1336,107 @@ index 000000000..bc18c1f22
 +                    continue;
 +                }
 +
-+                List<Object> keep = new ArrayList<>(edges.size());
-+                int classified = 0;
-+
-+                for (Object edge : edges) {
-+                    NsfwCellScanner.Scan scan = NsfwCellScanner.scan(edge);
-+                    if (scan == null) {
-+                        // Not a post - a carousel, an ad unit, an announcement. Leave it.
-+                        keep.add(edge);
-+                        continue;
-+                    }
-+                    classified++;
-+                    if (scan.nsfw) {
-+                        keep.add(edge);
-+                    }
-+                }
-+
-+                if (classified == 0) {
-+                    if (reportedSources.add("unreadable-home")) {
-+                        Utils.showToastLong("NSFW mode (home): could not read any post, "
-+                                + "feed left unfiltered");
-+                        Logger.printInfo(() -> "NSFW mode: no readable posts in the home response");
-+                    }
-+                    return;
-+                }
-+
-+                int before = edges.size();
-+                edges.clear();
-+                edges.addAll(keep);
-+
-+                if (reportedSources.add("home")) {
-+                    Utils.showToastShort("NSFW mode (home): kept " + keep.size()
-+                            + " of " + before + " posts");
-+                }
-+                Logger.printDebug(() -> "NSFW mode: home feed kept " + keep.size() + " posts");
++                filterEdges(edges);
 +                return;
 +            }
 +        } catch (Exception ex) {
 +            Logger.printException(() -> "filterHomeFeedResponse failure", ex);
 +        }
++    }
++
++    private static void filterEdges(List<Object> edges) {
++        int page = pagesSeen.incrementAndGet();
++        // The first page pays for a full walk of every edge so the tags it carried can be named
++        // in the diagnostic toast. Later pages stop as soon as they have their answer.
++        java.util.Set<String> tags = page == 1
++                ? java.util.Collections.synchronizedSet(new java.util.TreeSet<String>())
++                : null;
++
++        List<Object> keep = new ArrayList<>(edges.size());
++        Object lastPost = null;
++        int posts = 0;
++        int kept = 0;
++
++        for (Object edge : edges) {
++            NsfwCellScanner.Scan scan = NsfwCellScanner.scan(edge, tags);
++            if (scan == null) {
++                // Not a post - a carousel, an ad unit, an announcement. Leave it.
++                keep.add(edge);
++                continue;
++            }
++            posts++;
++            lastPost = edge;
++            if (scan.nsfw) {
++                keep.add(edge);
++                kept++;
++            }
++        }
++
++        if (posts == 0) {
++            // Not one edge was recognised as a post, which means the response shape changed
++            // rather than that this page happens to hold none. Fail open: an unfiltered feed is
++            // a far better failure than an empty one.
++            if (reportedSources.add("unreadable-home")) {
++                Utils.showToastLong("NSFW mode: no post was recognised in the home response, "
++                        + "feed left unfiltered");
++                Logger.printInfo(() -> "NSFW mode: no readable posts in the home response");
++            }
++            return;
++        }
++
++        // A page filtered down to no posts at all leaves the feed with nothing to draw and
++        // nothing to scroll, which reads on screen as a spinner that never resolves. Keeping one
++        // post back costs a single SFW post and lets the feed page on to where the 18+ ones are.
++        boolean padded = false;
++        if (kept == 0) {
++            keep.add(lastPost);
++            padded = true;
++        }
++
++        edges.clear();
++        edges.addAll(keep);
++
++        final int keptPosts = kept;
++        final int totalPosts = posts;
++        Logger.printDebug(() -> "NSFW mode: home page " + page + " kept "
++                + keptPosts + " of " + totalPosts + " posts");
++
++        // Temporary, and deliberately noisy for the first few pages: on-device is the only place
++        // the answer to "did it read the tags" actually exists.
++        if (page <= DIAGNOSTIC_PAGES) {
++            StringBuilder message = new StringBuilder("NSFW mode: page ").append(page)
++                    .append(" kept ").append(kept).append(" of ").append(posts).append(" posts");
++            if (padded) {
++                message.append(" (+1 held back so the feed can page on)");
++            }
++            if (tags != null) {
++                message.append("\ntags seen: ").append(describe(tags));
++            }
++            Utils.showToastLong(message.toString());
++        }
++    }
++
++    /**
++     * @return A short, readable list of the tags a page carried, for the diagnostic toast.
++     */
++    private static String describe(java.util.Set<String> tags) {
++        if (tags.isEmpty()) {
++            return "none";
++        }
++        StringBuilder text = new StringBuilder();
++        int shown = 0;
++        for (String tag : tags) {
++            if (shown == DIAGNOSTIC_TAGS) {
++                text.append(", +").append(tags.size() - shown).append(" more");
++                break;
++            }
++            if (shown > 0) {
++                text.append(", ");
++            }
++            text.append(tag);
++            shown++;
++        }
++        return text.toString();
 +    }
 +
 +    /**
@@ -1372,7 +1516,7 @@ index 000000000..bc18c1f22
 +    }
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
-index 892166b32..c473bce9d 100644
+index 892166b3..c473bce9 100644
 --- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
 @@ -45,6 +45,9 @@ public class Settings extends BaseSettings {
@@ -1386,7 +1530,7 @@ index 892166b32..c473bce9d 100644
      public static final BooleanSetting OPEN_LINKS_DIRECTLY = new BooleanSetting("morphe_open_links_directly", TRUE);
      public static final BooleanSetting OPEN_LINKS_EXTERNALLY = new BooleanSetting("morphe_open_links_externally", TRUE);
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java
-index 353379736..d765f679a 100644
+index 35337973..d765f679 100644
 --- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/RedditPreferenceFragment.java
 @@ -18,6 +18,7 @@ import app.morphe.extension.reddit.settings.preference.categories.AdsPreferenceC
@@ -1407,7 +1551,7 @@ index 353379736..d765f679a 100644
          new LayoutPreferenceCategory(context, preferenceScreen);
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/categories/NsfwPreferenceCategory.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/categories/NsfwPreferenceCategory.java
 new file mode 100644
-index 000000000..c55d82c82
+index 00000000..c55d82c8
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/preference/categories/NsfwPreferenceCategory.java
 @@ -0,0 +1,31 @@
@@ -1444,7 +1588,7 @@ index 000000000..c55d82c82
 +}
 diff --git a/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/DrawerRowClonerSelfTest.java b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/DrawerRowClonerSelfTest.java
 new file mode 100644
-index 000000000..766c3c70c
+index 00000000..766c3c70
 --- /dev/null
 +++ b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/DrawerRowClonerSelfTest.java
 @@ -0,0 +1,204 @@
@@ -1654,15 +1798,17 @@ index 000000000..766c3c70c
 +}
 diff --git a/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwCellScannerSelfTest.java b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwCellScannerSelfTest.java
 new file mode 100644
-index 000000000..0df66e844
+index 00000000..59bdf2f5
 --- /dev/null
 +++ b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwCellScannerSelfTest.java
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,207 @@
 +package app.morphe.extension.reddit.nsfw;
 +
 +import java.util.Arrays;
 +import java.util.Collections;
 +import java.util.List;
++import java.util.Set;
++import java.util.TreeSet;
 +
 +/**
 + * Dependency-free self-test for {@link NsfwCellScanner}. Runs with a plain JDK:
@@ -1674,8 +1820,9 @@ index 000000000..0df66e844
 + *   java  -cp /tmp/nsfw app.morphe.extension.reddit.nsfw.NsfwCellScannerSelfTest
 + * </pre>
 + *
-+ * <p>The fakes mirror the shape of Reddit's GraphQL metadata cells: obfuscated field names, a
-+ * {@code t3_} post id somewhere among the strings, and a status indicator list.
++ * <p>The fakes mirror the shape of Reddit's home feed response: obfuscated field names, a
++ * {@code t3_} post id among the strings, and the indicators buried nine levels down, which is
++ * where the real thing keeps them.
 + */
 +public final class NsfwCellScannerSelfTest {
 +    private static int pass = 0, fail = 0;
@@ -1685,34 +1832,94 @@ index 000000000..0df66e844
 +        System.out.printf("%s  %s%n", cond ? "PASS" : "FAIL", name);
 +    }
 +
-+    /** Stands in for com.reddit.type.PostStatusIndicatorType. */
-+    public enum PostStatusIndicatorType { NSFW, SPOILER, PINNED, LOCKED }
++    /** Stands in for com.reddit.type.CellIndicatorType. */
++    public enum CellIndicatorType { NSFW, SPOILER, ORIGINAL, QUARANTINED }
 +
-+    /** An unrelated enum that must not be mistaken for the indicator. */
-+    public enum OtherType { NSFW }
++    /** Stands in for com.reddit.type.NSFWState, which spells the same flag a second way. */
++    public enum NSFWState { NONE, NSFW }
 +
-+    /** MetadataCellFragment, with the renamed fields a real build has. */
-+    public static final class MetadataCell {
++    /** Stands in for com.reddit.type.PostStatusIndicatorType, which has no NSFW constant. */
++    public enum PostStatusIndicatorType { PINNED, LOCKED, MOD }
++
++    /** IndicatorsCellFragment, with the renamed fields a real build has. */
++    public static final class IndicatorsCell {
 +        public final String f1;
-+        public final String f2;
-+        public final List<?> f3;
++        public final List<?> f2;
++        public IndicatorsCell(String id, List<?> indicators) { this.f1 = id; this.f2 = indicators; }
++    }
 +
-+        public MetadataCell(String typename, String id, List<?> statusIndicators) {
-+            this.f1 = typename;
-+            this.f2 = id;
-+            this.f3 = statusIndicators;
++    /** One member of the Cell union. Every other member is null on a given cell. */
++    public static final class Cell {
++        public final String a;
++        public final Object o;
++        public final Object p;
++        public Cell(String typename, Object metadata, Object indicators) {
++            this.a = typename;
++            this.o = metadata;
++            this.p = indicators;
 +        }
 +    }
 +
-+    /** A cell nested inside a group, inside an edge. */
-+    public static final class Group {
++    /** MetadataCellFragment: carries the post id but none of the tags. */
++    public static final class MetadataCell {
++        public final String f1;
++        public final List<?> f2;
++        public MetadataCell(String id, List<?> statusIndicators) {
++            this.f1 = id;
++            this.f2 = statusIndicators;
++        }
++    }
++
++    public static final class GroupFragment {
++        public final Object adPayload;
 +        public final List<?> cells;
-+        public Group(List<?> cells) { this.cells = cells; }
++        public GroupFragment(List<?> cells) { this.adPayload = null; this.cells = cells; }
++    }
++
++    public static final class CellGroup {
++        public final String a;
++        public final String b;
++        public final GroupFragment e;
++        public CellGroup(String typename, String groupId, GroupFragment fragment) {
++            this.a = typename;
++            this.b = groupId;
++            this.e = fragment;
++        }
++    }
++
++    public static final class Node {
++        public final String a;
++        public final String b;
++        public final CellGroup c;
++        public final Object d;
++        public Node(String typename, String id, CellGroup group) {
++            this.a = typename;
++            this.b = id;
++            this.c = group;
++            this.d = null;
++        }
++    }
++
++    public static final class EdgeFragment {
++        public final Node node;
++        public EdgeFragment(Node node) { this.node = node; }
 +    }
 +
 +    public static final class Edge {
-+        public final Object node;
-+        public Edge(Object node) { this.node = node; }
++        public final String a;
++        public final EdgeFragment b;
++        public Edge(String typename, EdgeFragment fragment) { this.a = typename; this.b = fragment; }
++    }
++
++    /** Builds an edge shaped exactly like the one the home feed delivers. */
++    private static Edge feedEdge(String postId, Object... indicators) {
++        Cell metadata = new Cell("Cell", new MetadataCell(postId,
++                Arrays.asList(PostStatusIndicatorType.PINNED)), null);
++        Cell tags = new Cell("Cell", null,
++                new IndicatorsCell(postId, Arrays.asList(indicators)));
++        return new Edge("FeedElementEdge", new EdgeFragment(new Node("PostFeedElement", postId,
++                new CellGroup("CellGroup", "group1", new GroupFragment(
++                        Arrays.asList(metadata, tags))))));
 +    }
 +
 +    /** Self-referencing, to prove the walk terminates. */
@@ -1723,52 +1930,50 @@ index 000000000..0df66e844
 +
 +    public static void main(String[] args) {
 +        // --- the flag itself ---
-+        check(NsfwCellScanner.isNsfwIndicator(PostStatusIndicatorType.NSFW),
-+                "NSFW indicator is recognised");
-+        check(!NsfwCellScanner.isNsfwIndicator(PostStatusIndicatorType.SPOILER),
++        check(NsfwCellScanner.isNsfwIndicator(CellIndicatorType.NSFW),
++                "CellIndicatorType.NSFW is recognised");
++        check(NsfwCellScanner.isNsfwIndicator(NSFWState.NSFW),
++                "NSFWState.NSFW is recognised, since the schema spells it in more than one enum");
++        check(!NsfwCellScanner.isNsfwIndicator(CellIndicatorType.SPOILER),
 +                "SPOILER is not NSFW");
-+        check(!NsfwCellScanner.isNsfwIndicator(OtherType.NSFW),
-+                "an NSFW constant on an unrelated enum is ignored");
++        check(!NsfwCellScanner.isNsfwIndicator(NSFWState.NONE), "NONE is not NSFW");
 +        check(!NsfwCellScanner.isNsfwIndicator("NSFW"),
 +                "the bare string NSFW is not an indicator");
 +        check(!NsfwCellScanner.isNsfwIndicator(null), "null is not an indicator");
 +
-+        // --- a flat metadata cell ---
-+        NsfwCellScanner.Scan nsfw = NsfwCellScanner.scan(new MetadataCell(
-+                "MetadataCell", "t3_abc123",
-+                Arrays.asList(PostStatusIndicatorType.NSFW, PostStatusIndicatorType.PINNED)));
++        // --- a whole feed edge, at the depth the real one uses ---
++        NsfwCellScanner.Scan nsfw = NsfwCellScanner.scan(
++                feedEdge("t3_abc123", CellIndicatorType.NSFW, CellIndicatorType.SPOILER));
 +        check(nsfw != null && "t3_abc123".equals(nsfw.postId) && nsfw.nsfw,
-+                "flat cell yields its post id and NSFW state");
++                "an NSFW feed edge is read through all nine levels");
 +
-+        NsfwCellScanner.Scan sfw = NsfwCellScanner.scan(new MetadataCell(
-+                "MetadataCell", "t3_def456", Collections.emptyList()));
++        NsfwCellScanner.Scan sfw = NsfwCellScanner.scan(feedEdge("t3_def456"));
 +        check(sfw != null && "t3_def456".equals(sfw.postId) && !sfw.nsfw,
-+                "cell with no indicators is not NSFW");
++                "an edge with no indicators is not NSFW");
 +
-+        NsfwCellScanner.Scan spoiler = NsfwCellScanner.scan(new MetadataCell(
-+                "MetadataCell", "t3_ghi", Arrays.asList(PostStatusIndicatorType.SPOILER)));
++        NsfwCellScanner.Scan spoiler = NsfwCellScanner.scan(
++                feedEdge("t3_ghi", CellIndicatorType.SPOILER));
 +        check(spoiler != null && !spoiler.nsfw, "a spoiler-only post is not NSFW");
 +
-+        // --- nested, as the real feed delivers it ---
-+        Edge edge = new Edge(new Group(Arrays.asList(
-+                new MetadataCell("Other", "t3_nested", Arrays.asList(PostStatusIndicatorType.NSFW)))));
-+        NsfwCellScanner.Scan nested = NsfwCellScanner.scan(edge);
-+        check(nested != null && "t3_nested".equals(nested.postId) && nested.nsfw,
-+                "nested cell is found through the edge and group");
++        NsfwCellScanner.Scan quarantined = NsfwCellScanner.scan(
++                feedEdge("t3_jkl", CellIndicatorType.QUARANTINED, CellIndicatorType.NSFW));
++        check(quarantined != null && quarantined.nsfw,
++                "NSFW is found among several indicators");
++
++        // --- the shallow case still works ---
++        NsfwCellScanner.Scan flat = NsfwCellScanner.scan(
++                new IndicatorsCell("t3_flat", Arrays.asList(CellIndicatorType.NSFW)));
++        check(flat != null && "t3_flat".equals(flat.postId) && flat.nsfw,
++                "a flat cell is read too");
 +
 +        // --- id detection ---
-+        NsfwCellScanner.Scan noId = NsfwCellScanner.scan(new MetadataCell(
-+                "MetadataCell", "not-a-fullname", Collections.emptyList()));
-+        check(noId == null, "a fragment with no t3_ id yields null");
-+
-+        NsfwCellScanner.Scan firstId = NsfwCellScanner.scan(new MetadataCell(
-+                "t3_typename_lookalike", "t3_real", Collections.emptyList()));
-+        check(firstId != null && firstId.postId.startsWith("t3_"),
-+                "a t3_ string is taken as the id");
-+
++        check(NsfwCellScanner.scan(new MetadataCell("not-a-fullname",
++                Collections.emptyList())) == null,
++                "a fragment with no t3_ id yields null");
 +        check(NsfwCellScanner.scan(null) == null, "null fragment yields null");
-+        check(NsfwCellScanner.scan("t3_bare") == null,
-+                "a bare string is not a fragment");
++        check(NsfwCellScanner.scan("t3_bare") == null, "a bare string is not a fragment");
++        check(NsfwCellScanner.scan(Arrays.asList("t3_in_a_list")) == null,
++                "a bare list is not a fragment");
 +
 +        // --- termination ---
 +        Cyclic cyclic = new Cyclic();
@@ -1777,18 +1982,36 @@ index 000000000..0df66e844
 +        check(cyc != null && "t3_cycle".equals(cyc.postId), "a self-referencing model terminates");
 +
 +        // --- depth limit ---
-+        Object deep = new MetadataCell("x", "t3_deep", Arrays.asList(PostStatusIndicatorType.NSFW));
-+        for (int i = 0; i < 8; i++) deep = new Edge(deep);
++        Object deep = new IndicatorsCell("t3_deep", Arrays.asList(CellIndicatorType.NSFW));
++        for (int i = 0; i < 30; i++) deep = new EdgeFragment2(deep);
 +        NsfwCellScanner.Scan tooDeep = NsfwCellScanner.scan(deep);
-+        check(tooDeep == null || !tooDeep.nsfw, "the walk stops rather than recursing without bound");
++        check(tooDeep == null, "the walk stops rather than recursing without bound");
++
++        // --- diagnostics ---
++        Set<String> names = new TreeSet<>();
++        NsfwCellScanner.scan(feedEdge("t3_diag", CellIndicatorType.NSFW), names);
++        check(names.contains("CellIndicatorType.NSFW")
++                        && names.contains("PostStatusIndicatorType.PINNED"),
++                "collecting enum names reports every tag the edge carried");
++
++        Set<String> none = new TreeSet<>();
++        NsfwCellScanner.scan(feedEdge("t3_diag2"), none);
++        check(!none.contains("CellIndicatorType.NSFW"),
++                "collecting enum names does not invent tags");
 +
 +        System.out.printf("%nRESULT: %d passed, %d failed%n", pass, fail);
 +        if (fail > 0) System.exit(1);
 +    }
++
++    /** A one-field wrapper, for building a graph deeper than the walk is willing to follow. */
++    public static final class EdgeFragment2 {
++        public final Object next;
++        public EdgeFragment2(Object next) { this.next = next; }
++    }
 +}
 diff --git a/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java
 new file mode 100644
-index 000000000..0b6ffc6d0
+index 00000000..0b6ffc6d
 --- /dev/null
 +++ b/extensions/reddit/src/test/java/app/morphe/extension/reddit/nsfw/NsfwPostDetectorSelfTest.java
 @@ -0,0 +1,271 @@
@@ -2065,7 +2288,7 @@ index 000000000..0b6ffc6d0
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
 new file mode 100644
-index 000000000..b82ffb0a8
+index 00000000..b82ffb0a
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlock.java
 @@ -0,0 +1,100 @@
@@ -2171,7 +2394,7 @@ index 000000000..b82ffb0a8
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
 new file mode 100644
-index 000000000..2edf469f1
+index 00000000..2edf469f
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/catlock/CatLockOverlay.java
 @@ -0,0 +1,154 @@
@@ -2331,7 +2554,7 @@ index 000000000..2edf469f1
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
 new file mode 100644
-index 000000000..787f73fb9
+index 00000000..787f73fb
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotCommentFilter.java
 @@ -0,0 +1,51 @@
@@ -2388,7 +2611,7 @@ index 000000000..787f73fb9
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java
 new file mode 100644
-index 000000000..ede7d41a4
+index 00000000..ede7d41a
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/patches/components/BrainrotDetector.java
 @@ -0,0 +1,333 @@
@@ -2726,7 +2949,7 @@ index 000000000..ede7d41a4
 +    }
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-index e1012edd2..a3ad0810d 100644
+index e1012edd..a3ad0810 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 @@ -246,6 +246,7 @@ public class Settings extends SharedYouTubeSettings {
@@ -2746,7 +2969,7 @@ index e1012edd2..a3ad0810d 100644
      public static final BooleanSetting HIDE_COMMENTS_LIVE_CHAT_TOOLTIPS = new BooleanSetting("morphe_hide_comments_live_chat_tooltips", FALSE, true);
      public static final BooleanSetting HIDE_COMMENTS_PREVIEW_COMMENT = new BooleanSetting("morphe_hide_comments_preview_comment", FALSE);
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
-index 70db16a56..60b91dfff 100644
+index 70db16a5..60b91dff 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.kt
 @@ -11,6 +11,7 @@ import android.view.WindowInsets
@@ -2771,7 +2994,7 @@ index 70db16a56..60b91dfff 100644
              super.dispatchTouchEvent(ev)
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 new file mode 100644
-index 000000000..7c0c98e5a
+index 00000000..7c0c98e5
 --- /dev/null
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 @@ -0,0 +1,46 @@
@@ -2823,7 +3046,7 @@ index 000000000..7c0c98e5a
 +}
 diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java
 new file mode 100644
-index 000000000..ecccdb97b
+index 00000000..ecccdb97
 --- /dev/null
 +++ b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/catlock/AlternatingTapUnlockSelfTest.java
 @@ -0,0 +1,65 @@
@@ -2894,7 +3117,7 @@ index 000000000..ecccdb97b
 +}
 diff --git a/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
 new file mode 100644
-index 000000000..1f8946a5f
+index 00000000..1f8946a5
 --- /dev/null
 +++ b/extensions/youtube/src/test/java/app/morphe/extension/youtube/patches/components/BrainrotDetectorSelfTest.java
 @@ -0,0 +1,89 @@
@@ -2988,7 +3211,7 @@ index 000000000..1f8946a5f
 +    }
 +}
 diff --git a/patches/build.gradle.kts b/patches/build.gradle.kts
-index 63fc58ee8..8352f4b9d 100644
+index 63fc58ee..8352f4b9 100644
 --- a/patches/build.gradle.kts
 +++ b/patches/build.gradle.kts
 @@ -2,12 +2,12 @@ group = "app.morphe"
@@ -3011,7 +3234,7 @@ index 63fc58ee8..8352f4b9d 100644
  }
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
 new file mode 100644
-index 000000000..a477f1b9c
+index 00000000..a477f1b9
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
 @@ -0,0 +1,163 @@
@@ -3180,7 +3403,7 @@ index 000000000..a477f1b9c
 +)
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 new file mode 100644
-index 000000000..1a093d413
+index 00000000..1a093d41
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 @@ -0,0 +1,149 @@
@@ -3335,7 +3558,7 @@ index 000000000..1a093d413
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
 new file mode 100644
-index 000000000..9810429fc
+index 00000000..9810429f
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
 @@ -0,0 +1,66 @@
@@ -3406,7 +3629,7 @@ index 000000000..9810429fc
 +    }
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
-index 81aca9209..d4fcfea21 100644
+index 81aca920..d4fcfea2 100644
 --- a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 @@ -83,6 +83,8 @@ private const val EXPLORE_MENU_FILTER =
@@ -3435,7 +3658,7 @@ index 81aca9209..d4fcfea21 100644
          addLithoFilter(AISLIST_FILTER)
          addLithoFilter(CUSTOM_FILTER)
 diff --git a/patches/src/main/resources/addresources/values/reddit/strings.xml b/patches/src/main/resources/addresources/values/reddit/strings.xml
-index a4924a0d5..8f85ca172 100644
+index a4924a0d..8f85ca17 100644
 --- a/patches/src/main/resources/addresources/values/reddit/strings.xml
 +++ b/patches/src/main/resources/addresources/values/reddit/strings.xml
 @@ -22,6 +22,13 @@ Second \"item\" text"</string>
@@ -3453,7 +3676,7 @@ index a4924a0d5..8f85ca172 100644
      <string name="morphe_hide_answers_button_title">Hide Answers button</string>
      <string name="morphe_hide_chat_button_title">Hide Chat button</string>
 diff --git a/patches/src/main/resources/addresources/values/youtube/strings.xml b/patches/src/main/resources/addresources/values/youtube/strings.xml
-index 30b99f785..617ec14e6 100644
+index 30b99f78..617ec14e 100644
 --- a/patches/src/main/resources/addresources/values/youtube/strings.xml
 +++ b/patches/src/main/resources/addresources/values/youtube/strings.xml
 @@ -252,6 +252,8 @@ Changes include:
@@ -3476,7 +3699,7 @@ index 30b99f785..617ec14e6 100644
      <string name="morphe_copy_video_link_with_timestamp_button_title">Copy timestamp by default</string>
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
 new file mode 100644
-index 000000000..8629ca86a
+index 00000000..8629ca86
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button.xml
 @@ -0,0 +1,39 @@
@@ -3521,7 +3744,7 @@ index 000000000..8629ca86a
 +</vector>
 diff --git a/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 new file mode 100644
-index 000000000..c320a0f5d
+index 00000000..c320a0f5
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/drawable/morphe_yt_cat_lock_button_bold.xml
 @@ -0,0 +1,39 @@
@@ -3566,7 +3789,7 @@ index 000000000..c320a0f5d
 +</vector>
 diff --git a/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
 new file mode 100644
-index 000000000..33814e4a9
+index 00000000..33814e4a
 --- /dev/null
 +++ b/patches/src/main/resources/catlock/host/layout/youtube_controls_layout.xml
 @@ -0,0 +1,15 @@
