@@ -1,3 +1,9 @@
+## [1.4.1](https://github.com/variablenine/morphe-patches/compare/v1.4.0...v1.4.1) (2026-09-06)
+
+### 🐛 Bug Fixes
+
+* Drop the home feed's non-post units in NSFW mode ([5941cf3](https://github.com/variablenine/morphe-patches/commit/5941cf3c25320fea138628caf14c5f1eb33b5a75))
+
 ## [1.4.0](https://github.com/variablenine/morphe-patches/compare/v1.3.2...v1.4.0) (2026-09-06)
 
 ### ✨ New Features
