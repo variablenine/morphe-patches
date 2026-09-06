@@ -62,9 +62,9 @@ public final class NsfwFeedModePatch {
      * cell still carries its {@code CellIndicatorType.NSFW}.
      *
      * <p>Finds the edge list by type and filters it in place, so the cursor and the dist the
-     * mapper reads off the same response are left exactly as they arrived. Edges that are not
-     * posts are kept rather than dropped, and a response where no post was recognised at all is
-     * left alone, so a model change costs the filter rather than the feed.
+     * mapper reads off the same response are left exactly as they arrived. A response where no
+     * post was recognised at all is left alone, so a model change costs the filter rather than
+     * the feed.
      *
      * @param response The feed response about to be mapped.
      */
@@ -110,8 +110,12 @@ public final class NsfwFeedModePatch {
         for (Object edge : edges) {
             NsfwCellScanner.Scan scan = NsfwCellScanner.scan(edge);
             if (scan == null) {
-                // Not a post - a carousel, an ad unit, an announcement. Leave it.
-                keep.add(edge);
+                // Not a post. The home feed ships more than twenty element types that are not
+                // posts - four kinds of community recommendation carousel, chat channel units,
+                // topic pills, taxonomy rows, explore features, AMA carousels - and none of them
+                // carries a t3_ id, so none can be read for an NSFW state. They are dropped
+                // rather than kept: an 18+ feed with a "communities you might like" row in it is
+                // not what the mode is for.
                 continue;
             }
             posts++;
@@ -123,17 +127,17 @@ public final class NsfwFeedModePatch {
         }
 
         if (posts == 0) {
-            // Not one edge was recognised as a post, which means the response shape changed
-            // rather than that this page happens to hold none. Fail open: an unfiltered feed is
-            // a far better failure than an empty one.
+            // Not one edge on the whole page carried a post id, which reads as the response
+            // shape having changed rather than as a page that genuinely holds no posts. Fail
+            // open: an unfiltered feed is a far better failure than an empty one.
             Logger.printInfo(() -> "NSFW mode: no readable posts in the home response");
             return;
         }
 
         // A page left with nothing at all gives the feed nothing to draw and nothing to scroll,
-        // which reads on screen as a spinner that never resolves. One post is held back only in
-        // that case - a page still carrying a carousel or an announcement has something to
-        // render, so it is left as filtered.
+        // which reads on screen as a spinner that never resolves. One post is held back in that
+        // case, and it is the only way an SFW post reaches an 18+ feed: at most one per page
+        // that carried no 18+ post of its own.
         if (keep.isEmpty()) {
             keep.add(lastPost);
         }
