@@ -395,12 +395,253 @@ index 000000000..49aaeaa86
 +        }
 +    }
 +}
+diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
+new file mode 100644
+index 000000000..6ba6b04fa
+--- /dev/null
++++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwDrawerRow.java
+@@ -0,0 +1,235 @@
++package app.morphe.extension.reddit.patches;
++
++import java.lang.reflect.Constructor;
++import java.lang.reflect.Field;
++import java.lang.reflect.Modifier;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.List;
++
++import app.morphe.extension.reddit.settings.Settings;
++import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.ResourceUtils;
++import app.morphe.extension.shared.Utils;
++
++/**
++ * Adds an "NSFW" row to the navigation drawer, directly under Reddit's own Popular row,
++ * and toggles NSFW mode when it is tapped.
++ *
++ * <p>The row is built by cloning the Popular row rather than by constructing one from a known
++ * class: the drawer row type is obfuscated and renamed every release, but its shape
++ * ({@code (boolean, int titleRes, int iconRes, long uniqueId)}) is stable, and the clone
++ * inherits whatever the real type happens to be. Everything here is reflective and wrapped, so
++ * a shape change costs the row, not the app.
++ *
++ * <p>The Popular row is identified by its title resource id, looked up by name at runtime, which
++ * also resolves which of the two int fields is the title and which is the icon: only the title
++ * can equal a string resource id.
++ *
++ * <p>Note on why this toggles a filter instead of opening a mature feed: Reddit's
++ * {@code FeedType} and {@code ListingType} both carry a MATURE entry, but the app ships no
++ * mature feed screen (every other feed has one - HomeFeedScreen, PopularFeedScreen,
++ * LatestFeedScreen, AllFeedScreen). MATURE survives only in exhaustive Kotlin branch tables,
++ * so there is nothing to navigate to.
++ */
++@SuppressWarnings("unused")
++public final class NsfwDrawerRow {
++
++    /** Reddit's own string resource naming its Popular drawer row. */
++    private static final String POPULAR_LABEL_KEY = "popular_feed_label";
++
++    /** The string resource Morphe adds for this row. */
++    private static final String NSFW_LABEL_KEY = "morphe_nsfw_feed_mode_row_title";
++
++    /**
++     * Stable adapter id for the added row. Deliberately far from Reddit's own ids, which count
++     * down from zero, so it cannot collide with one.
++     */
++    private static final long ROW_UNIQUE_ID = Long.MIN_VALUE + 0x4E53_5730L;
++
++    private static final int UNRESOLVED = -1;
++
++    private static volatile int popularTitleId = UNRESOLVED;
++    private static volatile int nsfwTitleId = UNRESOLVED;
++
++    /** Whether the diagnostic toast explaining the fallback has been shown this app start. */
++    private static volatile boolean explainedFallback;
++
++    private NsfwDrawerRow() {
++    }
++
++    /**
++     * @return If this patch was included during patching.
++     */
++    public static boolean isPatchIncluded() {
++        return false;  // Modified during patching.
++    }
++
++    /**
++     * Injection point. Appends the NSFW row to the drawer section that holds the Popular row.
++     *
++     * @param items One drawer section's items.
++     * @return The same items, with the NSFW row appended if this section was the Popular one.
++     */
++    public static Collection<?> addNsfwRow(Collection<?> items) {
++        try {
++            if (items == null || items.isEmpty()) {
++                return items;
++            }
++
++            int popularId = popularTitleId();
++            int nsfwId = nsfwTitleId();
++            if (popularId == 0 || nsfwId == 0) {
++                return items;
++            }
++
++            for (Object item : items) {
++                Object row = cloneAsNsfwRow(item, popularId, nsfwId);
++                if (row == null) {
++                    continue;
++                }
++
++                List<Object> augmented = new ArrayList<>(items.size() + 1);
++                augmented.addAll(items);
++                augmented.add(row);
++
++                Logger.printDebug(() -> "NSFW mode: added drawer row after Popular");
++                return augmented;
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "addNsfwRow failure", ex);
++        }
++
++        return items;
++    }
++
++    /**
++     * Injection point. Handles a tap on a drawer row.
++     *
++     * @param row The row that was tapped.
++     * @return Whether this was the NSFW row, and the tap has been handled.
++     */
++    public static boolean onDrawerRowClicked(Object row) {
++        try {
++            int nsfwId = nsfwTitleId();
++            if (row == null || nsfwId == 0 || !hasIntField(row, nsfwId)) {
++                return false;
++            }
++
++            boolean enabled = !Settings.NSFW_FEED_MODE.get();
++            Settings.NSFW_FEED_MODE.save(enabled);
++
++            if (enabled) {
++                Utils.showToastShort("NSFW mode ON - refresh the feed");
++                if (!explainedFallback) {
++                    explainedFallback = true;
++                    Utils.showToastLong("Filtering the feed to 18+ posts. "
++                            + "This app build has no mature feed to open");
++                }
++            } else {
++                Utils.showToastShort("NSFW mode OFF - refresh the feed");
++            }
++
++            return true;
++        } catch (Exception ex) {
++            Logger.printException(() -> "onDrawerRowClicked failure", ex);
++            return false;
++        }
++    }
++
++    /**
++     * Builds an NSFW row from Reddit's Popular row, or null if this item is not that row.
++     */
++    private static Object cloneAsNsfwRow(Object item, int popularId, int nsfwId) {
++        if (item == null) {
++            return null;
++        }
++
++        Class<?> type = item.getClass();
++
++        Constructor<?> constructor;
++        try {
++            constructor = type.getDeclaredConstructor(
++                    boolean.class, int.class, int.class, long.class);
++        } catch (NoSuchMethodException ex) {
++            // Not a simple drawer row.
++            return null;
++        }
++
++        int titleId = UNRESOLVED;
++        int iconId = UNRESOLVED;
++        boolean flag = false;
++
++        try {
++            for (Field field : type.getDeclaredFields()) {
++                if (Modifier.isStatic(field.getModifiers())) {
++                    continue;
++                }
++                field.setAccessible(true);
++
++                Class<?> fieldType = field.getType();
++                if (fieldType == int.class) {
++                    int value = field.getInt(item);
++                    // Only the title can be a string resource id, so this also tells the
++                    // two int fields apart without relying on their declaration order.
++                    if (value == popularId) {
++                        titleId = value;
++                    } else {
++                        iconId = value;
++                    }
++                } else if (fieldType == boolean.class) {
++                    flag = field.getBoolean(item);
++                }
++            }
++
++            if (titleId != popularId || iconId == UNRESOLVED) {
++                return null;
++            }
++
++            constructor.setAccessible(true);
++            return constructor.newInstance(flag, nsfwId, iconId, ROW_UNIQUE_ID);
++        } catch (Exception ex) {
++            Logger.printException(() -> "cloneAsNsfwRow failure", ex);
++            return null;
++        }
++    }
++
++    private static boolean hasIntField(Object row, int value) {
++        try {
++            for (Field field : row.getClass().getDeclaredFields()) {
++                if (Modifier.isStatic(field.getModifiers()) || field.getType() != int.class) {
++                    continue;
++                }
++                field.setAccessible(true);
++                if (field.getInt(row) == value) {
++                    return true;
++                }
++            }
++        } catch (Exception ex) {
++            Logger.printException(() -> "hasIntField failure", ex);
++        }
++        return false;
++    }
++
++    private static int popularTitleId() {
++        int id = popularTitleId;
++        if (id == UNRESOLVED) {
++            id = ResourceUtils.getStringIdentifier(POPULAR_LABEL_KEY);
++            popularTitleId = id;
++            if (id == 0) {
++                Logger.printInfo(() -> "NSFW mode: no '" + POPULAR_LABEL_KEY
++                        + "' string, cannot place the drawer row");
++            }
++        }
++        return id;
++    }
++
++    private static int nsfwTitleId() {
++        int id = nsfwTitleId;
++        if (id == UNRESOLVED) {
++            id = ResourceUtils.getStringIdentifier(NSFW_LABEL_KEY);
++            nsfwTitleId = id;
++        }
++        return id;
++    }
++}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
 new file mode 100644
-index 000000000..862fde878
+index 000000000..2b3c2febb
 --- /dev/null
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/patches/NsfwFeedModePatch.java
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,118 @@
 +package app.morphe.extension.reddit.patches;
 +
 +import java.util.List;
@@ -408,6 +649,7 @@ index 000000000..862fde878
 +import app.morphe.extension.reddit.nsfw.NsfwPostDetector;
 +import app.morphe.extension.reddit.settings.Settings;
 +import app.morphe.extension.shared.Logger;
++import app.morphe.extension.shared.Utils;
 +
 +/**
 + * NSFW mode: while it is on, feed listings are reduced to their 18+ posts.
@@ -433,6 +675,13 @@ index 000000000..862fde878
 +     * Only logged once, since this runs on every page of every feed.
 +     */
 +    private static volatile boolean loggedUnreadableListing;
++
++    /**
++     * Whether the one-off diagnostic toast has been shown this app start. Temporary: it exists
++     * to answer, on a real device, whether this listing hook is reached at all on a given Reddit
++     * version - something no amount of decompiling settles. Remove once that is known.
++     */
++    private static volatile boolean reportedFirstListing;
 +
 +    /**
 +     * @return If this patch was included during patching.
@@ -477,14 +726,23 @@ index 000000000..862fde878
 +                // showing the feed unfiltered is a far better failure than silently emptying it.
 +                if (!loggedUnreadableListing) {
 +                    loggedUnreadableListing = true;
++                    String model = describeFirstItem(list);
 +                    Logger.printInfo(() -> "NSFW mode: no NSFW flag found on "
-+                            + describeFirstItem(list) + ", leaving listings unfiltered");
++                            + model + ", leaving listings unfiltered");
++                    Utils.showToastLong("NSFW mode: could not read " + model
++                            + ", feed left unfiltered");
 +                }
 +                return list;
 +            }
 +
 +            Logger.printDebug(() -> "NSFW mode: kept " + result.nsfwItems.size()
 +                    + " of " + list.size() + " posts");
++
++            if (!reportedFirstListing) {
++                reportedFirstListing = true;
++                Utils.showToastShort("NSFW mode: kept " + result.nsfwItems.size()
++                        + " of " + list.size() + " posts");
++            }
 +
 +            return result.nsfwItems;
 +        } catch (Exception ex) {
@@ -1798,14 +2056,19 @@ index 63fc58ee8..8352f4b9d 100644
  }
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
 new file mode 100644
-index 000000000..798944a3a
+index 000000000..33b7faf2b
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/Fingerprints.kt
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,123 @@
 +package app.morphe.patches.reddit.layout.nsfw
 +
 +import app.morphe.patcher.Fingerprint
++import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
 +import app.morphe.patcher.fieldAccess
++import app.morphe.patcher.methodCall
++import app.morphe.patcher.newInstance
++import app.morphe.patcher.opcode
++import app.morphe.patcher.parametersMatch
 +import com.android.tools.smali.dexlib2.AccessFlags
 +import com.android.tools.smali.dexlib2.Opcode
 +
@@ -1837,24 +2100,114 @@ index 000000000..798944a3a
 +        )
 +    )
 +)
++
++/**
++ * The static helper that turns one drawer section into rows. Deliberately a separate instance
++ * from the identical fingerprint in the 'Hide sidebar components' patch, for the same reason
++ * [NsfwListingFingerprint] is separate from the ads one: a shared instance would hand the second
++ * patch to run indices the first had already shifted. Both inject at the head of this method and
++ * chain in either order, one dropping sections and the other appending a row.
++ */
++private object DrawerSectionBuilderParentFingerprint : Fingerprint(
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
++    returnType = $$"Lcom/reddit/navdrawer/analytics/CommunityDrawerAnalytics$Section;",
++    parameters = listOf("Lcom/reddit/screens/drawer/community/HeaderItem;"),
++    filters = listOf(
++        methodCall("Ljava/lang/Enum;->ordinal()I"),
++        fieldAccess(
++            $$"Lcom/reddit/navdrawer/analytics/CommunityDrawerAnalytics$Section;->" +
++                    $$"ABOUT:Lcom/reddit/navdrawer/analytics/CommunityDrawerAnalytics$Section;"
++        )
++    )
++)
++
++internal object NsfwDrawerSectionFingerprint : Fingerprint(
++    classFingerprint = DrawerSectionBuilderParentFingerprint,
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
++    returnType = "V",
++    filters = listOf(
++        methodCall("Ljava/util/Collection;->isEmpty()Z"),
++    ),
++    custom = { method, _ ->
++        parametersMatch(
++            method.parameters,
++            listOf(
++                "L",
++                "Ljava/util/List;",
++                "Ljava/util/Collection;",
++                "L",
++                "L",
++                "Z",
++                "I"
++            )
++        ) || parametersMatch( // 2026.12.0+
++            method.parameters,
++            listOf(
++                "Ljava/util/List;",
++                "Ljava/util/Collection;",
++                "L",
++                "L",
++                "Z",
++                "I"
++            )
++        )
++    }
++)
++
++/**
++ * The drawer's click router. Reddit renamed the enclosing class and method, but kept the name of
++ * the lambda class this method instantiates, which makes a stable anchor.
++ *
++ * The tapped row is not a parameter: it is looked up from a map and cast, so the match walks to
++ * that cast and the patch reads the row from the register it lands in.
++ */
++internal object NsfwDrawerItemClickFingerprint : Fingerprint(
++    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
++    returnType = "V",
++    filters = listOf(
++        methodCall(
++            name = "get",
++            parameters = listOf("Ljava/lang/Object;"),
++            returnType = "Ljava/lang/Object;"
++        ),
++        opcode(
++            Opcode.MOVE_RESULT_OBJECT,
++            location = MatchAfterImmediately()
++        ),
++        opcode(
++            Opcode.CHECK_CAST,
++            location = MatchAfterImmediately()
++        ),
++        newInstance(
++            type = $$"Lcom/reddit/screens/drawer/community/CommunityDrawerPresenter$handleGenericItemClicked$1;"
++        )
++    )
++)
 diff --git a/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
 new file mode 100644
-index 000000000..2b8c34b86
+index 000000000..a7d8898d2
 --- /dev/null
 +++ b/patches/src/main/kotlin/app/morphe/patches/reddit/layout/nsfw/NsfwFeedModePatch.kt
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,105 @@
 +package app.morphe.patches.reddit.layout.nsfw
 +
 +import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
++import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 +import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 +import app.morphe.patcher.patch.bytecodePatch
 +import app.morphe.patches.reddit.misc.settings.settingsPatch
 +import app.morphe.patches.reddit.shared.Constants.COMPATIBILITY_REDDIT
++import app.morphe.util.findFreeRegister
 +import app.morphe.util.setExtensionIsPatchIncluded
++import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 +import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
++import java.util.logging.Logger
 +
 +private const val EXTENSION_CLASS =
 +    "Lapp/morphe/extension/reddit/patches/NsfwFeedModePatch;"
++
++private const val DRAWER_EXTENSION_CLASS =
++    "Lapp/morphe/extension/reddit/patches/NsfwDrawerRow;"
 +
 +@Suppress("unused")
 +val nsfwFeedModePatch = bytecodePatch(
@@ -1888,6 +2241,57 @@ index 000000000..2b8c34b86
 +        }
 +
 +        setExtensionIsPatchIncluded(EXTENSION_CLASS)
++
++        // region Navigation drawer row
++
++        // Best effort. The drawer is a far more volatile surface than the listing model, so a
++        // miss here costs the row and leaves the filter and its settings toggle working, rather
++        // than failing the whole patch and leaving the user unable to build at all.
++        try {
++            // Resolve the click router first and inject it first: a row that cannot respond to
++            // taps is worse than no row, so the two hooks go in together or not at all.
++            NsfwDrawerItemClickFingerprint.let {
++                it.method.apply {
++                    // The tapped row lands in the register of the cast that follows the lookup.
++                    val castIndex = it.instructionMatches[2].index
++                    val rowRegister = getInstruction<OneRegisterInstruction>(castIndex).registerA
++                    val free = findFreeRegister(castIndex, rowRegister)
++
++                    addInstructionsWithLabels(
++                        castIndex + 1,
++                        """
++                            invoke-static { v$rowRegister }, $DRAWER_EXTENSION_CLASS->onDrawerRowClicked(Ljava/lang/Object;)Z
++                            move-result v$free
++                            if-eqz v$free, :not_handled
++                            return-void
++                            :not_handled
++                            nop
++                        """
++                    )
++                }
++            }
++
++            NsfwDrawerSectionFingerprint.method.apply {
++                val collectionParameter = parameterTypes.indexOf("Ljava/util/Collection;")
++
++                addInstructions(
++                    0,
++                    """
++                        invoke-static/range { p$collectionParameter .. p$collectionParameter }, $DRAWER_EXTENSION_CLASS->addNsfwRow(Ljava/util/Collection;)Ljava/util/Collection;
++                        move-result-object p$collectionParameter
++                    """
++                )
++            }
++
++            setExtensionIsPatchIncluded(DRAWER_EXTENSION_CLASS)
++        } catch (ex: Exception) {
++            Logger.getLogger(this::class.java.name).warning(
++                "'NSFW mode' could not add its navigation drawer row: ${ex.message}. " +
++                        "Feed filtering and the Morphe settings toggle are unaffected."
++            )
++        }
++
++        // endregion
 +    }
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/interaction/catlock/CatLockPatch.kt
@@ -1992,15 +2396,16 @@ index 81aca9209..d4fcfea21 100644
          addLithoFilter(AISLIST_FILTER)
          addLithoFilter(CUSTOM_FILTER)
 diff --git a/patches/src/main/resources/addresources/values/reddit/strings.xml b/patches/src/main/resources/addresources/values/reddit/strings.xml
-index a4924a0d5..b6537ed73 100644
+index a4924a0d5..8f85ca172 100644
 --- a/patches/src/main/resources/addresources/values/reddit/strings.xml
 +++ b/patches/src/main/resources/addresources/values/reddit/strings.xml
-@@ -22,6 +22,12 @@ Second \"item\" text"</string>
+@@ -22,6 +22,13 @@ Second \"item\" text"</string>
      <string name="morphe_hide_post_ads_title">Hide feed ads</string>
      <string name="morphe_hide_comment_ads_title">Hide comment ads</string>
  
 +    <string name="morphe_screen_nsfw_title">NSFW mode</string>
 +    <string name="morphe_nsfw_feed_mode_title">NSFW mode</string>
++    <string name="morphe_nsfw_feed_mode_row_title">NSFW</string>
 +    <string name="morphe_nsfw_feed_mode_summary">"Hides everything except NSFW (18+) posts from the feed.
 +
 +Reddit only sends 18+ posts to accounts that have 'Show NSFW content' turned on, so the feed will be empty without that account setting"</string>

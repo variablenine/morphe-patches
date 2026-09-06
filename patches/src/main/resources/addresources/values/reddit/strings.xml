@@ -24,6 +24,7 @@ Second \"item\" text"</string>
 
     <string name="morphe_screen_nsfw_title">NSFW mode</string>
     <string name="morphe_nsfw_feed_mode_title">NSFW mode</string>
+    <string name="morphe_nsfw_feed_mode_row_title">NSFW</string>
     <string name="morphe_nsfw_feed_mode_summary">"Hides everything except NSFW (18+) posts from the feed.
 
 Reddit only sends 18+ posts to accounts that have 'Show NSFW content' turned on, so the feed will be empty without that account setting"</string>

@@ -16,7 +16,7 @@ it too.
 
 ### 1. The delta patch — `.fork/upstream-delta.patch`
 
-27 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
+28 files, re-applied onto each new upstream tree. Semantics (for manual re-application when the
 patch no longer applies cleanly):
 
 **Feature: Hide brainrot comments (YouTube)**
@@ -56,7 +56,15 @@ patch no longer applies cleanly):
 | `extensions/reddit/.../settings/Settings.java` | Add `NSFW_FEED_MODE = new BooleanSetting("morphe_nsfw_feed_mode", FALSE)` in its own `// NSFW mode` region. Two-arg constructor on purpose: no app restart needed. |
 | `extensions/reddit/.../preference/categories/NsfwPreferenceCategory.java` | **New file.** Mirrors `AdsPreferenceCategory`. |
 | `extensions/reddit/.../preference/RedditPreferenceFragment.java` | Construct `NsfwPreferenceCategory` after `AdsPreferenceCategory`, plus its import. |
-| `patches/src/main/resources/addresources/values/reddit/strings.xml` | Add `morphe_screen_nsfw_title` and `morphe_nsfw_feed_mode_{title,summary}`. Only the default `values/` locale — Crowdin fills the rest. |
+| `extensions/reddit/.../patches/NsfwDrawerRow.java` | **New file.** Adds an NSFW row to the navigation drawer under Reddit's Popular row, and toggles NSFW mode on tap. Builds the row by **cloning** the Popular row reflectively — the row type is obfuscated and renamed every release, but its shape `(boolean, int titleRes, int iconRes, long uniqueId)` is stable — and identifies Popular by looking up the `popular_feed_label` string id at runtime, which also disambiguates the title int from the icon int. All reflective and wrapped: a shape change costs the row, not the app. |
+| `patches/src/main/resources/addresources/values/reddit/strings.xml` | Add `morphe_screen_nsfw_title`, `morphe_nsfw_feed_mode_{title,summary}` and `morphe_nsfw_feed_mode_row_title`. Only the default `values/` locale — Crowdin fills the rest. |
+
+The drawer hooks live in the same patch but are wrapped in `try`/`catch`: the drawer is far more
+volatile than the listing model, so a fingerprint miss costs the row and leaves feed filtering and
+the settings toggle working, instead of failing the patch and leaving the user unable to build.
+`NsfwDrawerSectionFingerprint` is (again deliberately) a separate instance of the same fingerprint
+`hideSidebarComponentsPatch` uses; `NsfwDrawerItemClickFingerprint` anchors on the unobfuscated
+lambda class `CommunityDrawerPresenter$handleGenericItemClicked$1`.
 
 Known limitation to preserve on sync: the hook is the `Listing` model, so it covers listing-backed feeds (front page and subreddits) but not the section-backed Popular/Latest feeds, which `Hide ads` reaches through `AdPostSectionConstructorFingerprint` instead. Adding a section-level hook needs a decompiled Reddit APK to fingerprint against.
 

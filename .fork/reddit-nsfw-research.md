@@ -177,3 +177,25 @@ One caution found along the way: `QsfScreenType.MATURE_FEED` exists alongside
 of a mature destination. So even if the navigation is wired up, the feed may demand verification
 before it renders — one more reason the fallback path has to exist and has to say which branch it
 took.
+
+
+## Settled: the MATURE feed is not reachable, and the row toggles the filter
+
+Every feed the app can show has its own screen class — `HomeFeedScreen`, `PopularFeedScreen`,
+`LatestFeedScreen`, `AllFeedScreen`, `NewsFeedScreen`, `GamesFeedScreen`, `FollowingFeedScreen`,
+`HistoryFeedScreen`, `SavedPostsFeedScreen`, `InterestsFeedScreen`. **There is no
+`MatureFeedScreen`**, and nothing constructs a feed for `FeedType.MATURE`.
+
+The drawer's navigator confirms it from the other direction: each feed row calls its own no-arg
+method (`hox.p()` Popular, `hox.n()` Watch, `hox.h()` Latest). There is no "open feed by type"
+call to pass MATURE to, and no mature method to call. Several feed-behaviour sets
+(`d670`, `RedditFeedViewModel`) list the feed types they apply to and simply omit MATURE.
+
+So the MATURE constants are exhaustiveness artifacts: Kotlin `when` over an enum must cover every
+entry, which is exactly why MATURE shows up in `api`/`bpi`/`vh40` mapping tables and nowhere that
+builds UI. `MATURE_DESTINATION` sits among GraphQL enum values, not screens; the only real
+`Mature*` screens are age-gating and settings (`MatureContentFlowHostScreen`,
+`MatureContentSettingsScreen`, `MatureContentBottomSheetScreen`, `CommunityTypeMatureSettingsScreen`).
+
+The drawer row therefore toggles NSFW mode's feed filter. Reaching a real mature feed would mean
+building a feed screen inside the patch, which is out of proportion to the feature.

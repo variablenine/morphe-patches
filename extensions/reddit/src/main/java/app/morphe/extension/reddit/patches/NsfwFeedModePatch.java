@@ -5,6 +5,7 @@ import java.util.List;
 import app.morphe.extension.reddit.nsfw.NsfwPostDetector;
 import app.morphe.extension.reddit.settings.Settings;
 import app.morphe.extension.shared.Logger;
+import app.morphe.extension.shared.Utils;
 
 /**
  * NSFW mode: while it is on, feed listings are reduced to their 18+ posts.
@@ -30,6 +31,13 @@ public final class NsfwFeedModePatch {
      * Only logged once, since this runs on every page of every feed.
      */
     private static volatile boolean loggedUnreadableListing;
+
+    /**
+     * Whether the one-off diagnostic toast has been shown this app start. Temporary: it exists
+     * to answer, on a real device, whether this listing hook is reached at all on a given Reddit
+     * version - something no amount of decompiling settles. Remove once that is known.
+     */
+    private static volatile boolean reportedFirstListing;
 
     /**
      * @return If this patch was included during patching.
@@ -74,14 +82,23 @@ public final class NsfwFeedModePatch {
                 // showing the feed unfiltered is a far better failure than silently emptying it.
                 if (!loggedUnreadableListing) {
                     loggedUnreadableListing = true;
+                    String model = describeFirstItem(list);
                     Logger.printInfo(() -> "NSFW mode: no NSFW flag found on "
-                            + describeFirstItem(list) + ", leaving listings unfiltered");
+                            + model + ", leaving listings unfiltered");
+                    Utils.showToastLong("NSFW mode: could not read " + model
+                            + ", feed left unfiltered");
                 }
                 return list;
             }
 
             Logger.printDebug(() -> "NSFW mode: kept " + result.nsfwItems.size()
                     + " of " + list.size() + " posts");
+
+            if (!reportedFirstListing) {
+                reportedFirstListing = true;
+                Utils.showToastShort("NSFW mode: kept " + result.nsfwItems.size()
+                        + " of " + list.size() + " posts");
+            }
 
             return result.nsfwItems;
         } catch (Exception ex) {
