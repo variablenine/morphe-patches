@@ -100,3 +100,68 @@ and the result is a real paginated feed rather than a thinned-out Home. Open que
 committing to that: which navigator builds a feed screen from a `FeedType` (several
 `defpackage` classes take a `FeedType` parameter), and whether the mature listing endpoint still
 returns anything server-side for an account with 18+ browsing enabled.
+
+## How the drawer's Popular / Latest rows are actually built
+
+`CommunityDrawerPresenter` is `com.reddit.screens.drawer.community.c` in `classes6.dex`
+(the class keeps its name; its members are obfuscated). Drawer rows are plain constructor calls
+carrying **resource ids**, which makes them cheap to imitate:
+
+```java
+new qt6(boolean, int titleRes, int iconRes, long uniqueId)   // simple row
+new u7k(long uniqueId, int titleRes, int iconRes, boolean, GenericPredefinedUiModelType, int)
+```
+
+The Home/Popular/Watch/Latest rows come from one merged synthetic `Function0` in `c`, switched on
+a lambda index — each is a lazily built field of the presenter:
+
+| case | titleRes | resolves to | iconRes |
+|---|---|---|---|
+| 1 | 2131956125 | (home) | 2131231656 |
+| 2 | 2131959179 | `popular_feed_label` | 2131231831 |
+| 3 | 2131958780 | (watch) | 2131231761 |
+| default | 2131956400 | `latest_feed_label` | 2131231755 |
+
+Other rows, for reference: `communities_cta_title` + `icon_communities` (Discover communities),
+`label_custom_feeds`, `label_start_a_community`, `label_mail`, `label_mod_mail`,
+`label_manage_moderated_communities`.
+
+Rows reach the visible list through two static helpers, both already in fingerprint range:
+
+- `hh3.q(ListBuilder, Collection, HeaderItemUiModel, PaginationType, boolean, int)` — a whole
+  section. This is what `CommunityDrawerBuilderFingerprint` matches and what
+  `HideSidebarComponentsPatch.hideComponents` already intercepts.
+- `hh3.r(ListBuilder, item)` — a single row.
+
+`HeaderItemUiModel` is `defpackage.ion` (`uniqueId`, `HeaderItem`, boolean, String, boolean).
+
+Clicks land in `CommunityDrawerPresenter.handleGenericItemClicked`, which does **identity**
+comparisons (`Intrinsics.areEqual(item, this.B1)` and so on) against those presenter fields, then
+calls a navigator interface (`defpackage.hox`: `.d()` create community, `.e()` custom feeds,
+`.k()` login, `.l()` mod queue, `.m()`, `.r()` recap). An injected row will match none of them and
+fall through, so recognising it is better done by **comparing its title resource id** to the one
+Morphe adds than by identity.
+
+### Sketch for the NSFW row
+
+1. Add a Morphe string, take its generated id via `resourceMappingPatch`, and reuse Reddit's own
+   `2131231831` (the Popular icon) so no drawable has to be shipped.
+2. Hook `hh3.r` (or the presenter method that adds the Latest row) and append
+   `new qt6(false, <morphe title id>, 2131231831, <uniqueId>)`. Constructor descriptor is
+   `(ZIIJ)V`.
+3. Hook `handleGenericItemClicked`, match on the title id, and run the NSFW action.
+
+### Still open: how to navigate to the MATURE feed
+
+Step 3's action is the unresolved piece. `hox`'s methods are the drawer's navigation surface but
+the interface is split across dex files and decompiles empty in `classes4.dex`, so the call that
+opens a feed for a given `FeedType` has not been pinned down yet. Several `defpackage` classes
+take a `FeedType` parameter (`w1o, z570, nug, xoi, gd3, t570, p110, i8h0, n9i, omi`) and are the
+place to look next.
+
+One caution found along the way: `QsfScreenType.MATURE_FEED` exists alongside
+`RESOLVER_GATE_PRESENTATION_MATURE_DESTINATION` and
+`CHECKPOINT_GATE_PRESENTATION_MATURE_DESTINATION`, which look like age-verification gates in front
+of a mature destination. So even if the navigation is wired up, the feed may demand verification
+before it renders — one more reason the fallback path has to exist and has to say which branch it
+took.
