@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.44.0",
+  "version": "1.4.5",
   "patches": [
     {
       "name": "Add to queue",
@@ -634,6 +634,81 @@
       "dependencies": [
         "BytecodePatch",
         "BytecodePatch",
+        "BytecodePatch"
+      ],
+      "compatiblePackages": [
+        {
+          "packageName": "com.google.android.youtube",
+          "name": "YouTube",
+          "description": null,
+          "apkFileType": "APK_REQUIRED",
+          "appIconColor": "#FF0033",
+          "signatures": [
+            "5aad2bee6db95d17e05a08d7d1e64c10a1511879154483916b6ae6c7fd9cb0c6",
+            "3d7a1223019aa39d9ea0e3436ab7c0896bfb4fb679f4de5fe7c23f326c8f994a"
+          ],
+          "targets": [
+            {
+              "version": "21.38.123",
+              "versionCodes": null,
+              "isExperimental": true,
+              "minSdk": 29,
+              "description": null
+            },
+            {
+              "version": "21.37.42",
+              "versionCodes": null,
+              "isExperimental": true,
+              "minSdk": 29,
+              "description": null
+            },
+            {
+              "version": "21.28.208",
+              "versionCodes": null,
+              "isExperimental": true,
+              "minSdk": 29,
+              "description": null
+            },
+            {
+              "version": "21.16.256",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "21.13.164",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "20.31.42",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "20.21.37",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 26,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "Cat lock",
+      "description": "Adds a cat button to the video player that locks the screen so a pet can watch without accidentally swiping the video away; unlock by quickly tapping alternating opposite sides of the screen.",
+      "default": true,
+      "category": null,
+      "dependencies": [
+        "ResourcePatch",
         "BytecodePatch"
       ],
       "compatiblePackages": [
@@ -6389,6 +6464,67 @@
               "versionCodes": null,
               "isExperimental": false,
               "minSdk": 26,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "NSFW mode",
+      "description": "Adds an NSFW row to the navigation drawer that reduces the home feed to its 18+ posts. Turned off until it is switched on. Reddit only sends 18+ posts to accounts that have 'Show NSFW content' enabled, so the feed is empty without that account setting.",
+      "default": true,
+      "category": null,
+      "dependencies": [
+        "BytecodePatch",
+        "ResourcePatch",
+        "ResourcePatch"
+      ],
+      "compatiblePackages": [
+        {
+          "packageName": "com.reddit.frontpage",
+          "name": "Reddit",
+          "description": null,
+          "apkFileType": "APKM",
+          "appIconColor": "#FF4500",
+          "signatures": [
+            "970b91143813b4c9d5f3634f672c9fcaa5621b4efaaedafd6c235cbbb869736f"
+          ],
+          "targets": [
+            {
+              "version": "2026.38.0",
+              "versionCodes": null,
+              "isExperimental": true,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "2026.37.0",
+              "versionCodes": null,
+              "isExperimental": true,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "2026.24.0",
+              "versionCodes": null,
+              "isExperimental": true,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "2026.14.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 28,
+              "description": null
+            },
+            {
+              "version": "2026.04.0",
+              "versionCodes": null,
+              "isExperimental": false,
+              "minSdk": 28,
               "description": null
             }
           ]
