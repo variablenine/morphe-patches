@@ -1431,10 +1431,10 @@ index 000000000..12943bbef
 +    }
 +}
 diff --git a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
-index 68a6b0f22..ec9bbde7b 100644
+index ab4c29a5a..91eea69ca 100644
 --- a/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
 +++ b/extensions/reddit/src/main/java/app/morphe/extension/reddit/settings/Settings.java
-@@ -54,6 +54,9 @@ public class Settings extends BaseSettings {
+@@ -55,6 +55,9 @@ public class Settings extends BaseSettings {
      public static final BooleanSetting SHOW_VIEW_COUNT = new BooleanSetting("morphe_show_view_count", FALSE, true);
      public static final BooleanSetting SWAP_POST_VOTE_COMMENT_BUTTONS = new BooleanSetting("morphe_swap_post_vote_comment_buttons", FALSE, true);
  
@@ -2620,10 +2620,10 @@ index 000000000..ede7d41a4
 +    }
 +}
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-index b1c331e5d..69a301a01 100644
+index cbfa952c6..6e1472fe2 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/settings/Settings.java
-@@ -334,6 +334,7 @@ public class Settings extends SharedYouTubeSettings {
+@@ -337,6 +337,7 @@ public class Settings extends SharedYouTubeSettings {
      public static final StringSetting EXPORT_DOWNLOAD_FOLDER = new StringSetting("morphe_export_download_folder", "", DOWNLOAD_MODE.availability(DownloadMode.DEFAULT, DownloadMode.IN_APP));
  
      // Overlay buttons
@@ -2631,7 +2631,7 @@ index b1c331e5d..69a301a01 100644
      public static final BooleanSetting FULLSCREEN_VIDEO_SCALE_BUTTON = new BooleanSetting("morphe_fullscreen_video_scale_button", FALSE, true);
      public static final BooleanSetting FULLSCREEN_VIDEO_SCALE_BUTTON_FULLSCREEN_ONLY = new BooleanSetting("morphe_fullscreen_video_scale_button_fullscreen_only", FALSE, parent(FULLSCREEN_VIDEO_SCALE_BUTTON));
      public static final BooleanSetting COPY_VIDEO_LINK_BUTTON = new BooleanSetting("morphe_copy_video_link_button", FALSE, true);
-@@ -489,6 +490,7 @@ public class Settings extends SharedYouTubeSettings {
+@@ -497,6 +498,7 @@ public class Settings extends SharedYouTubeSettings {
      public static final BooleanSetting HIDE_COMMENTS_GIFT_ANIMATION_AND_CARDS = new BooleanSetting("morphe_hide_comments_gift_animation_and_cards", FALSE);
      public static final BooleanSetting HIDE_COMMENTS_GIFT_BUTTON = new BooleanSetting("morphe_hide_comments_gift_button", TRUE, true);
      public static final BooleanSetting HIDE_COMMENTS_INFO_BUTTON = new BooleanSetting("morphe_hide_comments_info_button", FALSE, true);
@@ -2640,7 +2640,7 @@ index b1c331e5d..69a301a01 100644
      public static final BooleanSetting HIDE_COMMENTS_LIVE_CHAT_SCROLL_TO_BOTTOM_BUTTON = new BooleanSetting("morphe_hide_comments_live_chat_scroll_to_bottom_button", FALSE, true);
      public static final BooleanSetting HIDE_COMMENTS_LIVE_CHAT_TOOLTIPS = new BooleanSetting("morphe_hide_comments_live_chat_tooltips", FALSE, true);
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.java
-index 8298462c1..880cd115f 100644
+index aeeb80296..acf40bed2 100644
 --- a/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.java
 +++ b/extensions/youtube/src/main/java/app/morphe/extension/youtube/swipecontrols/SwipeControlsHostActivity.java
 @@ -27,6 +27,7 @@ import java.util.function.Consumer;
@@ -2660,9 +2660,9 @@ index 8298462c1..880cd115f 100644
 +        // so they would react to brightness/volume swipes even while the lock overlay is
 +        // shown. Step aside while locked; the overlay view then consumes the event.
 +        if (!CatLockOverlay.isLocked() && gesture.submitTouchEvent(ev)) {
-             return true;
-         }
-         return super.dispatchTouchEvent(ev);
+             // The consumed event does not reach Activity.dispatchTouchEvent, which reports the
+             // user interaction. Without it YouTube thinks the user is idle and stops the autoplay
+             // countdown at the end of the video.
 diff --git a/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java b/extensions/youtube/src/main/java/app/morphe/extension/youtube/videoplayer/CatLockButton.java
 new file mode 100644
 index 000000000..7c0c98e5a
@@ -3310,10 +3310,10 @@ index 000000000..a437945e1
 +    }
 +}
 diff --git a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
-index 3fa25dfbb..a5ecd83f7 100644
+index 4576b3822..3a3ebf242 100644
 --- a/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
 +++ b/patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/general/HideLayoutComponentsPatch.kt
-@@ -94,6 +94,8 @@ private const val EXPLORE_MENU_FILTER =
+@@ -101,6 +101,8 @@ private const val EXPLORE_MENU_FILTER =
      "Lapp/morphe/extension/youtube/patches/components/ExploreMenuFilter;"
  private const val COMMENTS_FILTER =
      "Lapp/morphe/extension/youtube/patches/components/CommentsFilter;"
@@ -3322,7 +3322,7 @@ index 3fa25dfbb..a5ecd83f7 100644
  private const val CUSTOM_FILTER =
      "Lapp/morphe/extension/youtube/patches/components/CustomFilter;"
  private const val KEYWORD_FILTER =
-@@ -171,6 +173,7 @@ val hideLayoutComponentsPatch = patch(
+@@ -178,6 +180,7 @@ val hideLayoutComponentsPatch = patch(
                              inputType = InputType.TEXT_MULTI_LINE
                          )
                      ),
@@ -3330,7 +3330,7 @@ index 3fa25dfbb..a5ecd83f7 100644
                      SwitchPreference("morphe_hide_comments_ai_chat_summary"),
                      SwitchPreference("morphe_hide_comments_channel_guidelines"),
                      SwitchPreference("morphe_hide_comments_by_members_header"),
-@@ -419,6 +422,7 @@ val hideLayoutComponentsPatch = patch(
+@@ -426,6 +429,7 @@ val hideLayoutComponentsPatch = patch(
              addLithoFilter(EXPLORE_MENU_FILTER)
          }
          addLithoFilter(COMMENTS_FILTER)
@@ -3339,7 +3339,7 @@ index 3fa25dfbb..a5ecd83f7 100644
          addLithoFilter(CUSTOM_FILTER)
          addSpanFilter(SANITIZE_VIDEO_SUBTITLE_FILTER)
 diff --git a/patches/src/main/resources/addresources/values/reddit/strings.xml b/patches/src/main/resources/addresources/values/reddit/strings.xml
-index 3a72b7763..08ecf1fe3 100644
+index 401110d3c..a71a0b898 100644
 --- a/patches/src/main/resources/addresources/values/reddit/strings.xml
 +++ b/patches/src/main/resources/addresources/values/reddit/strings.xml
 @@ -29,6 +29,13 @@ To use an older version, you must &lt;b>uninstall&lt;/b> Reddit and then install
@@ -3357,7 +3357,7 @@ index 3a72b7763..08ecf1fe3 100644
      <string name="morphe_hide_answers_button_title">Hide Answers button</string>
      <string name="morphe_hide_chat_button_title">Hide Chat button</string>
 diff --git a/patches/src/main/resources/addresources/values/youtube/strings.xml b/patches/src/main/resources/addresources/values/youtube/strings.xml
-index 7909c20c1..eae961821 100644
+index 8179a99de..6b7a32c75 100644
 --- a/patches/src/main/resources/addresources/values/youtube/strings.xml
 +++ b/patches/src/main/resources/addresources/values/youtube/strings.xml
 @@ -288,6 +288,8 @@ Changes include:
@@ -3369,7 +3369,7 @@ index 7909c20c1..eae961821 100644
      <string name="morphe_hide_comments_ai_chat_summary_title">Hide AI chat summary</string>
      <string name="morphe_hide_comments_channel_guidelines_title">Hide channel guidelines</string>
      <string name="morphe_hide_comments_contexts_title">Hide context messages</string>
-@@ -491,6 +493,8 @@ Reports are public and are reviewed before a channel is added to a list. Removal
+@@ -484,6 +486,8 @@ Reports are public and are reviewed before a channel is added to a list. Removal
      <!-- interaction.copyvideolink.copyVideoLinkButtonPatch -->
      <string name="morphe_share_copy_link_button_success">Link copied to clipboard</string>
      <string name="morphe_share_copy_link_with_timestamp_button_success">Link with timestamp copied to clipboard</string>
