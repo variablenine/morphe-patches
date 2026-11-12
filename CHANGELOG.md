@@ -4,9 +4,6 @@
 
 * This bundle no longer contains the official Morphe patches. Keep the official Morphe source in Morphe Manager and add this one next to it.
 
-Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01N7p38JCz8B34bg51xsPykN
-
 ### refactor
 
 * Retire the fork of the official patches ([fd66aac](https://github.com/variablenine/morphe-patches/commit/fd66aacf93fe046d028e766d2e2e316c61311028))

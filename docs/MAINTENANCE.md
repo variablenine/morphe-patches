@@ -73,9 +73,21 @@ a bullet that names the app. The bullets are the commit subjects. So:
 | for both apps (shared code, which is most changes) | `fix: Tab overlaps the navigation bar in YouTube and Reddit` |
 | nothing a user would notice | `chore: ...`, `docs: ...`, `ci: ...`, `test: ...`, `refactor: ...` (no release) |
 
-`feat` gives a minor release, `fix`, `perf` and `bump` a patch release, a `!` or a
-`BREAKING CHANGE:` footer a major one. `scripts/check-commit-subjects.py` enforces the naming in CI.
+`feat` gives a minor release, `fix`, `perf` and `bump` a patch release, a `!` after the type a
+major one. `scripts/check-commit-subjects.py` enforces the naming in CI.
 Never start a subject with "Add experimental support for": Morphe Manager skips such entries.
+Do not use a `BREAKING CHANGE:` footer: everything after it, attribution lines included, ends up
+in the release notes. The `!` is enough.
+
+### A release run has to end green
+
+The last thing a release does is copy `main` to `dev`. In 2.0.0 that step failed, after the release
+itself had been published, because a `.gitattributes` file asked for line endings that the
+committed `gradlew.bat` does not have, which made git see the file as changed. The file was
+removed. Do not add line-ending rules back without also normalising the files they cover.
+If a release run ends red, read which step failed before doing anything else: when the release was
+published and only the copy to `dev` failed, `dev` is merely behind (Morphe Manager takes the
+higher version of the two branches) and the next release run brings it up to date.
 
 ## The upstream check
 
