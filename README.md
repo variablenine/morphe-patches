@@ -95,8 +95,30 @@ bundle and publishes a fix by itself if one is needed. How that works is written
 ## 🩹 Patches list
 
 <!-- PATCHES_START EXPANDED -->
+> **[v2.0.0](https://github.com/variablenine/morphe-patches/releases/tag/v2.0.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;2 patches total
+<details open>
+<summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;1 patch</summary>
+<br>
 
-The list of patches is filled in here when a release is made.
+**Package name:** `com.google.android.youtube`
+
+| 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
+|----------|----------------|-----------|
+| [Duet reminders](#duet-reminders) | Keeps reminders from Claude Duet in a small tab at the edge of the screen until you mark them done. Meant to be used together with the official Morphe patches. Needs notification access, which the app asks for the first time it is opened. Does not work with root mount installs. |  |
+
+</details>
+
+<details open>
+<summary>📦 Reddit&nbsp;&nbsp;•&nbsp;&nbsp;1 patch</summary>
+<br>
+
+**Package name:** `com.reddit.frontpage`
+
+| 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
+|----------|----------------|-----------|
+| [Duet reminders](#duet-reminders) | Keeps reminders from Claude Duet in a small tab at the edge of the screen until you mark them done. Meant to be used together with the official Morphe patches. Needs notification access, which the app asks for the first time it is opened. Does not work with root mount installs. |  |
+
+</details>
 
 <!-- PATCHES_END -->
 
