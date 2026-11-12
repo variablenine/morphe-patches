@@ -28,3 +28,18 @@ val duetRemindersYouTubePatch = patch(
         addReminderSpot(siblingPackages = REDDIT_PACKAGES)
     }
 }
+
+@Suppress("unused")
+val duetRemindersRedditPatch = patch(
+    name = "Duet reminders",
+    description = DESCRIPTION,
+    default = true,
+) {
+    compatibleWith(Compatibility(name = "Reddit", packageName = "com.reddit.frontpage"))
+
+    extendWith(EXTENSION)
+
+    execute {
+        addReminderSpot(siblingPackages = YOUTUBE_PACKAGES)
+    }
+}
