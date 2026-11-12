@@ -45,10 +45,7 @@ private class Facts(
  */
 class DuetRemindersPatchTest {
 
-    // The newest one: a local build directory can still hold the bundle of an earlier version.
-    private val bundle: File = File(System.getProperty("duet.bundleDir"))
-        .listFiles { file -> file.name.endsWith(".mpp") }!!
-        .maxByOrNull { it.lastModified() }!!
+    private val bundle = File(System.getProperty("duet.bundle"))
 
     private val patches: Set<Patch> by lazy { loadPatchesFromJar(setOf(bundle)) }
 

@@ -34,14 +34,14 @@ sourceSets.test {
 tasks {
     test {
         useJUnitPlatform()
-        // The tests patch a small stand-in app with the bundle exactly as it is released.
+        // The tests patch a small stand-in app with the bundle exactly as it is released:
+        // the jar, after buildAndroid has added the Android code to it.
         dependsOn("buildAndroid")
-        systemProperty("duet.bundleDir", layout.buildDirectory.dir("libs").get().asFile.absolutePath)
-        // Optional: a real official bundle and real apps, for the compatibility check.
-        // See docs/MAINTENANCE.md.
-        listOf("duet.officialBundle", "duet.youtubeApk", "duet.redditApk").forEach { key ->
-            providers.gradleProperty(key).orNull?.let { systemProperty(key, it) }
-        }
+        val bundle = named<Jar>("jar").flatMap { it.archiveFile }
+        // Declared as an input, or Gradle would reuse an old test result after the
+        // extension changed, because the test classes themselves did not.
+        inputs.file(bundle).withPropertyName("bundle")
+        doFirst { systemProperty("duet.bundle", bundle.get().asFile.absolutePath) }
         testLogging {
             events("passed", "skipped", "failed")
             showStandardStreams = true

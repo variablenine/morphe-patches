@@ -42,7 +42,7 @@ fail=0
 note() { printf '%s\n' "$*"; }
 bad() { printf 'PROBLEM: %s\n' "$*"; fail=1; }
 
-OURS="$(ls -t "$ROOT"/patches/build/libs/patches-*.mpp 2>/dev/null | head -1 || true)"
+OURS="$(ls -t "$ROOT"/patches/build/libs/patches-*.mpp 2>/dev/null | grep -v -e '-sources' -e '-javadoc' | head -1 || true)"
 [ -n "$OURS" ] || { echo "No built bundle. Run ./gradlew :patches:buildAndroid first." >&2; exit 2; }
 
 # --- 1. latest stable official bundle ---------------------------------------
