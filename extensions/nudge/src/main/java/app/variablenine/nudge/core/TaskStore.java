@@ -84,7 +84,11 @@ public final class TaskStore {
         return true;
     }
 
-    private void save() {
+    /**
+     * Synchronized so that reading the book and handing it to storage is one step. Two
+     * threads saving at once could otherwise store the older of two snapshots last.
+     */
+    private synchronized void save() {
         prefs.edit().putString(KEY_BOOK, book.toJson()).apply();
     }
 

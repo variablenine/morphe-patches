@@ -1,5 +1,8 @@
 package app.variablenine.nudge;
 
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
@@ -15,6 +18,7 @@ import app.variablenine.nudge.core.Task;
 import app.variablenine.nudge.core.TaskBook;
 import app.variablenine.nudge.core.TaskIds;
 import app.variablenine.nudge.core.TaskStore;
+import app.variablenine.nudge.ui.OverlayController;
 
 /**
  * Receives the phone's notifications once the user has granted notification access,
@@ -34,7 +38,12 @@ public final class NudgeListenerService extends NotificationListenerService {
      */
     private static final long REPOST_WINDOW = 10 * TaskBook.MINUTE;
 
+    /** How long a group header is given for its member notifications to show up. */
+    private static final long SUMMARY_WAIT = 1_500L;
+
     private static volatile NudgeListenerService connected;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     /** Notification key and reminder id to the time it was first seen. Small and in memory only. */
     private final Map<String, Long> firstSeen = new LinkedHashMap<String, Long>(32, 0.75f, true) {
@@ -55,6 +64,13 @@ public final class NudgeListenerService extends NotificationListenerService {
         try {
             Nudge.onListenerChanged(this);
             scanActive();
+            // The system connects the listener on its own after a restart. If the user
+            // asked for listening only while the app is open, take what is waiting and
+            // let go again.
+            if (Build.VERSION.SDK_INT >= 24 && Prefs.get(this).onlyWhileOpen()
+                    && !OverlayController.isInForeground()) {
+                requestUnbind();
+            }
         } catch (Throwable t) {
             Log.w("listener connect failed", t);
         }
@@ -73,6 +89,7 @@ public final class NudgeListenerService extends NotificationListenerService {
     @Override
     public void onDestroy() {
         if (connected == this) connected = null;
+        handler.removeCallbacksAndMessages(null);
         super.onDestroy();
     }
 
@@ -116,6 +133,45 @@ public final class NudgeListenerService extends NotificationListenerService {
         Prefs prefs = Prefs.get(this);
         if (!prefs.isSource(pkg)) return;
 
+        if (NotificationParser.isGroupSummary(sbn.getNotification())) {
+            // A header may arrive before the notifications it groups. Look again in a
+            // moment: if it is still alone then, it is the message itself.
+            final String key = sbn.getKey();
+            handler.postDelayed(() -> {
+                try {
+                    StatusBarNotification alone = loneSummary(key);
+                    if (alone != null) ingest(alone, prefs);
+                } catch (Throwable t) {
+                    Log.w("notification handling failed", t);
+                }
+            }, SUMMARY_WAIT);
+            return;
+        }
+        ingest(sbn, prefs);
+    }
+
+    /** The group header with this key, if it is still showing and has no members. */
+    private StatusBarNotification loneSummary(String key) {
+        StatusBarNotification[] active;
+        try {
+            active = getActiveNotifications();
+        } catch (Throwable t) {
+            return null;
+        }
+        if (active == null) return null;
+        StatusBarNotification summary = null;
+        for (StatusBarNotification sbn : active) {
+            if (key.equals(sbn.getKey())) summary = sbn;
+        }
+        if (summary == null) return null;
+        for (StatusBarNotification sbn : active) {
+            if (sbn != summary && summary.getGroupKey().equals(sbn.getGroupKey())) return null;
+        }
+        return summary;
+    }
+
+    private void ingest(StatusBarNotification sbn, Prefs prefs) {
+        String pkg = sbn.getPackageName();
         List<Reminder> reminders = NotificationParser.parse(sbn.getNotification(), sbn.getPostTime());
         if (reminders.isEmpty()) return;
         TaskStore store = TaskStore.get(this);
@@ -157,6 +213,8 @@ public final class NudgeListenerService extends NotificationListenerService {
                 if (pkg == null || !prefs.isSource(pkg)) continue;
                 List<Reminder> reminders =
                         NotificationParser.parse(sbn.getNotification(), sbn.getPostTime());
+                // Never dismiss a group header: that would take its members with it.
+                if (NotificationParser.isGroupSummary(sbn.getNotification())) continue;
                 boolean holdsIt = false;
                 boolean allFinished = !reminders.isEmpty();
                 for (Reminder r : reminders) {

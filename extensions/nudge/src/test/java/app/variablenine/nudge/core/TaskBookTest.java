@@ -229,6 +229,45 @@ public class TaskBookTest {
     }
 
     @Test
+    public void beingAskedAgainMakesAnOldReminderFreshAgain() {
+        TaskBook book = new TaskBook();
+        book.ingest(DUET, "s", "Old but asked again", T0);
+        long later = T0 + 48 * HOUR;
+        assertTrue("faded by now", book.current(later, FADE).isEmpty());
+        book.ingest(DUET, "s", "Old but asked again", later);
+        Task t = only(book, later + MIN);
+        assertEquals(2, t.count);
+        assertTrue(book.faded(later + MIN, FADE).isEmpty());
+    }
+
+    @Test
+    public void anOldSnoozedReminderThatIsAskedAgainComesBackInsteadOfVanishing() {
+        TaskBook book = new TaskBook();
+        book.ingest(DUET, "s", "Snoozed for ages", T0);
+        Task t = only(book, T0);
+        book.act(t.id, Task.SNOOZED, T0 + 60 * HOUR, T0 + MIN);
+        long later = T0 + 50 * HOUR;
+        book.ingest(DUET, "s", "Snoozed for ages", later);
+        assertEquals(Task.OPEN, only(book, later + MIN).state);
+    }
+
+    @Test
+    public void undoingAnOldReminderPutsItBackInViewNotAmongTheOldOnes() {
+        TaskBook book = new TaskBook();
+        book.ingest(DUET, "s", "Old one", T0);
+        Task t = only(book, T0);
+        book.act(t.id, Task.SNOOZED, T0 + 40 * HOUR, T0 + MIN);
+        long later = T0 + 41 * HOUR;
+        assertEquals(1, book.current(later, FADE).size());
+        // Two days on it has faded. It is finished from the list, and then undone.
+        long muchLater = T0 + 90 * HOUR;
+        assertTrue(book.current(muchLater, FADE).isEmpty());
+        book.act(t.id, Task.DONE, 0, muchLater);
+        book.act(t.id, Task.OPEN, 0, muchLater + 2000);
+        assertEquals(1, book.current(muchLater + 3000, FADE).size());
+    }
+
+    @Test
     public void aReminderThatJustCameBackFromSnoozeIsFreshAgain() {
         TaskBook book = new TaskBook();
         book.ingest(DUET, "s", "Snoozed long", T0);

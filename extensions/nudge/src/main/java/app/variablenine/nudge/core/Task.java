@@ -81,11 +81,14 @@ public final class Task {
     }
 
     /**
-     * The moment this task last became relevant: when it was issued, or when a snooze
-     * or an "on it" timer ran out, whichever is later. Ageing is measured from here.
+     * The moment this task last became relevant: when it was issued or issued again, when
+     * a snooze or an "on it" timer ran out, or when the user brought it back, whichever
+     * is latest. Ageing is measured from here, so a reminder that is asked again or
+     * undone is fresh again and does not slip away among the old ones.
      */
     public long anchor() {
-        return Math.max(createdAt, until);
+        long latest = Math.max(Math.max(createdAt, until), seenAt);
+        return state == OPEN ? Math.max(latest, updatedAt) : latest;
     }
 
     Task with(int newState, long newUntil, long newUpdatedAt) {

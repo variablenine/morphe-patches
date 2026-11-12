@@ -60,6 +60,13 @@ public final class OverlayController
     private static final int WHY_TIMER = 1;
     private static final int WHY_ARRIVED = 2;
 
+    /** What became of a wish to cue. */
+    private static final int CUE_SHOWN = 0;
+    /** Not possible right now (fullscreen, a panel is open, the app is not in front). Worth retrying. */
+    private static final int CUE_BLOCKED = 1;
+    /** Not wanted (cues are off or quiet, or one was shown too recently). */
+    private static final int CUE_SKIPPED = 2;
+
     private static volatile OverlayController instance;
 
     private final Application app;
@@ -67,7 +74,7 @@ public final class OverlayController
     private final Map<Activity, NudgeLayer> layers = new HashMap<>();
     private WeakReference<Activity> resumed = new WeakReference<>(null);
     private int startedCount;
-    private boolean foreground;
+    private volatile boolean foreground;
     private boolean listening;
 
     private Dialog dialog;
@@ -84,10 +91,14 @@ public final class OverlayController
     private long lastArrivalCueAt;
     private int cueRound;
     private boolean cueShowing;
+    /** A reminder arrived while no cue could be shown. It gets its cue at the next chance. */
+    private boolean pendingArrival;
 
     /** A short confirmation shown in the tab after an action, e.g. "Done. Nice." with undo. */
     private Task undoTask;
     private boolean confirming;
+    /** The screen the confirmation is shown on. A tap is an undo there and nowhere else. */
+    private Activity confirmOwner;
 
     private final Runnable refreshRunnable = () -> Ui.safely(this::refresh);
     private final Runnable retractRunnable = () -> Ui.safely(this::endCue);
@@ -117,6 +128,12 @@ public final class OverlayController
 
     static OverlayController get() {
         return instance;
+    }
+
+    /** Whether a screen of the app is in front. Safe from any thread. */
+    public static boolean isInForeground() {
+        OverlayController c = instance;
+        return c != null && c.foreground;
     }
 
     private void postRefresh() {
@@ -160,7 +177,7 @@ public final class OverlayController
                 }
                 refresh();
                 closeSetupIfConnected();
-                maybeCue(WHY_OPENED);
+                cueOnReturn();
                 scheduleTimer();
             }));
         } catch (Throwable t) {
@@ -175,8 +192,10 @@ public final class OverlayController
             handler.removeCallbacks(timerRunnable);
             handler.removeCallbacks(retractRunnable);
             cueShowing = false;
+            // An acknowledgement belongs to the screen it was shown on and ends with it.
+            if (confirming && confirmOwner == activity) endConfirmation();
             NudgeLayer layer = layers.get(activity);
-            if (layer != null && !confirming) layer.tab.reset();
+            if (layer != null) layer.tab.reset();
         } catch (Throwable t) {
             Log.w("paused failed", t);
         }
@@ -287,9 +306,10 @@ public final class OverlayController
         for (Map.Entry<Activity, NudgeLayer> entry : layers.entrySet()) {
             NudgeLayer layer = entry.getValue();
             boolean obstructed = layer.obstructed();
-            boolean show = (confirming || !current.isEmpty() || setup) && !obstructed;
+            boolean confirmingHere = confirming && entry.getKey() == confirmOwner;
+            boolean show = (confirmingHere || !current.isEmpty() || setup) && !obstructed;
             TabView tab = layer.tab;
-            if (!confirming) {
+            if (!confirmingHere) {
                 if (setup) {
                     tab.setMark(TabView.MARK_PLUS, 0);
                     tab.setContentDescription("Set up Duet reminders");
@@ -309,14 +329,17 @@ public final class OverlayController
             if (entry.getKey() == front) {
                 if (wasObstructed && !obstructed) {
                     // Leaving fullscreen is a natural pause, and a good moment to be seen.
-                    handler.post(() -> Ui.safely(() -> maybeCue(WHY_OPENED)));
+                    handler.post(() -> Ui.safely(this::cueOnReturn));
                 }
                 wasObstructed = obstructed;
             }
         }
 
         if (cueShowing && current.isEmpty() && !setup) endCue();
-        if (arrived) maybeCue(WHY_ARRIVED);
+        // A reminder that arrives during fullscreen video, or while the app is not in
+        // front, must not lose its moment: it is remembered and shown at the next chance.
+        if (arrived && maybeCue(WHY_ARRIVED) == CUE_BLOCKED) pendingArrival = true;
+        if (current.isEmpty()) pendingArrival = false;
 
         // Come back when the next snooze or "on it" timer runs out.
         handler.removeCallbacks(refreshRunnable);
@@ -349,31 +372,47 @@ public final class OverlayController
         scheduleTimer();
     }
 
-    private void maybeCue(int why) {
+    /** The app is in front again, or fullscreen ended: show what was missed, or the usual cue. */
+    private void cueOnReturn() {
+        if (pendingArrival) {
+            int result = maybeCue(WHY_ARRIVED);
+            if (result != CUE_BLOCKED) pendingArrival = false;
+            if (result == CUE_SHOWN) return;
+        }
+        maybeCue(WHY_OPENED);
+    }
+
+    /** The settings changed how often to cue. */
+    void settingsChanged() {
+        if (resumed.get() != null) scheduleTimer();
+        postRefresh();
+    }
+
+    private int maybeCue(int why) {
         Activity activity = resumed.get();
-        if (activity == null || confirming || cueShowing || isDialogShowing()) return;
+        if (activity == null || confirming || cueShowing || isDialogShowing()) return CUE_BLOCKED;
         NudgeLayer layer = layers.get(activity);
-        if (layer == null || layer.tab.getVisibility() != View.VISIBLE) return;
+        if (layer == null || layer.tab.getVisibility() != View.VISIBLE) return CUE_BLOCKED;
 
         Prefs prefs = Prefs.get(app);
         long now = System.currentTimeMillis();
         int cues = prefs.cues();
-        if (cues == Prefs.CUES_OFF || now < prefs.pausedUntil()) return;
+        if (cues == Prefs.CUES_OFF || now < prefs.pausedUntil()) return CUE_SKIPPED;
 
         long tick = SystemClock.elapsedRealtime();
         if (why == WHY_ARRIVED) {
-            if (lastArrivalCueAt != 0 && tick - lastArrivalCueAt < ARRIVAL_GAP) return;
+            if (lastArrivalCueAt != 0 && tick - lastArrivalCueAt < ARRIVAL_GAP) return CUE_SKIPPED;
         } else {
             long gap = cues == Prefs.CUES_REGULAR ? GAP_REGULAR : GAP_GENTLE;
             // The timer fires exactly one gap after it was set; allow for scheduling slack.
-            if (lastCueAt != 0 && tick - lastCueAt < gap - 5_000L) return;
+            if (lastCueAt != 0 && tick - lastCueAt < gap - 5_000L) return CUE_SKIPPED;
         }
 
         List<Task> current = TaskStore.get(app).current(now, prefs.fadeMillis());
         String line;
         String sub;
         if (current.isEmpty()) {
-            if (!Nudge.needsSetup(app, now)) return;
+            if (!Nudge.needsSetup(app, now)) return CUE_SKIPPED;
             line = "Reminders from Duet can wait here";
             sub = "Tap to set up";
         } else {
@@ -400,6 +439,7 @@ public final class OverlayController
         tab.breathe();
         handler.removeCallbacks(retractRunnable);
         handler.postDelayed(retractRunnable, tab.isLineCut() ? CUE_HOLD_LONG : CUE_HOLD);
+        return CUE_SHOWN;
     }
 
     /**
@@ -451,6 +491,7 @@ public final class OverlayController
         NudgeLayer layer = activity == null ? null : layers.get(activity);
         if (layer == null || layer.obstructed()) return;
         confirming = true;
+        confirmOwner = activity;
         undoTask = undo;
         TabView tab = layer.tab;
         tab.setMark(mark, 0);
@@ -467,9 +508,11 @@ public final class OverlayController
         handler.removeCallbacks(endConfirmRunnable);
         if (!confirming) return;
         confirming = false;
+        confirmOwner = null;
         undoTask = null;
         for (NudgeLayer layer : layers.values()) layer.tab.retract();
         refresh();
+        if (pendingArrival && maybeCue(WHY_ARRIVED) != CUE_BLOCKED) pendingArrival = false;
     }
 
     void haptic(View view) {
@@ -489,10 +532,13 @@ public final class OverlayController
     @Override
     public void onTabTapped(Activity activity) {
         if (confirming) {
+            boolean here = activity == confirmOwner;
             Task undo = undoTask;
             endConfirmation();
-            if (undo != null) Nudge.reopen(app, undo);
-            return;
+            if (here) {
+                if (undo != null) Nudge.reopen(app, undo);
+                return;
+            }
         }
         endCue();
         noteInteraction();

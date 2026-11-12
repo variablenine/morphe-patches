@@ -130,6 +130,7 @@ final class TabView extends View {
     void setSide(boolean right) {
         if (sideRight != right) {
             sideRight = right;
+            excludeFromBackGesture();
             invalidate();
         }
     }
@@ -246,7 +247,12 @@ final class TabView extends View {
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+        excludeFromBackGesture();
+    }
+
+    private void excludeFromBackGesture() {
         try {
+            if (getWidth() == 0) return;
             if (Build.VERSION.SDK_INT >= 29) {
                 // Without this the system's back swipe would win every drag that starts on the tab.
                 int w = getWidth();
@@ -409,6 +415,19 @@ final class TabView extends View {
                 return true;
             default:
                 return true;
+        }
+    }
+
+    /**
+     * The view is as wide as the widest pill, but only the drawn shape is "there". Without
+     * this a screen reader or a mouse could not reach what lies under the empty part.
+     */
+    @Override
+    public boolean dispatchHoverEvent(MotionEvent event) {
+        try {
+            return hits(event.getX(), event.getY()) && super.dispatchHoverEvent(event);
+        } catch (Throwable t) {
+            return false;
         }
     }
 

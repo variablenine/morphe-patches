@@ -269,7 +269,7 @@ final class SettingsDialog extends SheetDialog {
             if (i > 0) lp.leftMargin = Ui.dp(activity, 8);
             row.addView(Ui.chip(activity, labels[i], i == selected, () -> {
                 choice.pick(index);
-                OverlayController.refreshAll();
+                controller.settingsChanged();
                 render();
             }), lp);
         }

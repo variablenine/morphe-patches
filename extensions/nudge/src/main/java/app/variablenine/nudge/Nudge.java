@@ -12,6 +12,7 @@ import android.service.notification.NotificationListenerService;
 import app.variablenine.nudge.core.Log;
 import app.variablenine.nudge.core.Prefs;
 import app.variablenine.nudge.core.Task;
+import app.variablenine.nudge.core.TaskIds;
 import app.variablenine.nudge.core.TaskStore;
 import app.variablenine.nudge.ui.OverlayController;
 
@@ -106,14 +107,20 @@ public final class Nudge {
     }
 
     public static void addManual(Context context, String text) {
-        TaskStore.get(context).ingest(Task.PKG_MANUAL, "", text, System.currentTimeMillis(),
-                TaskStore.FROM_USER);
+        add(context, Task.PKG_MANUAL, "", text);
     }
 
     public static void addSample(Context context) {
-        TaskStore.get(context).ingest(Task.PKG_SAMPLE, "Sample",
-                "This is what a reminder looks like. Tap Done to clear it.",
-                System.currentTimeMillis(), TaskStore.FROM_USER);
+        add(context, Task.PKG_SAMPLE, "Sample", "This is what a reminder looks like. Tap Done to clear it.");
+    }
+
+    private static void add(Context context, String pkg, String sender, String text) {
+        TaskStore store = TaskStore.get(context);
+        store.ingest(pkg, sender, text, System.currentTimeMillis(), TaskStore.FROM_USER);
+        // Asked for by hand, so it has to appear, even if the same words were finished a
+        // moment ago (which for a notification would mean "the same one again").
+        Task task = store.get(TaskIds.of(pkg, text));
+        if (task != null && task.isClosed()) store.act(task.id, Task.OPEN, 0);
     }
 
     // endregion

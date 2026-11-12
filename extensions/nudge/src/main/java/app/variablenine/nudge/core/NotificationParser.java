@@ -33,6 +33,8 @@ public final class NotificationParser {
     }
 
     private static final long TWO_DAYS = 2 * TaskBook.DAY;
+    /** Android 16 "live update" notifications. The constant itself only exists from API 36. */
+    private static final int FLAG_PROMOTED_ONGOING = 0x00040000;
 
     private NotificationParser() {
     }
@@ -40,17 +42,20 @@ public final class NotificationParser {
     /**
      * @param postTime when the system received the notification
      * @return the reminders in the notification, oldest first; empty if it is not a
-     * message for the user (progress bars, ongoing status, group headers)
+     * message for the user (progress bars, live status, calls). Whether a group header
+     * counts is for the caller to decide, see {@link #isGroupSummary}.
      */
     public static List<Reminder> parse(Notification n, long postTime) {
         if (n == null) return Collections.emptyList();
         Bundle extras = n.extras;
         if (extras == null) return Collections.emptyList();
 
-        int skipFlags = Notification.FLAG_GROUP_SUMMARY | Notification.FLAG_ONGOING_EVENT
-                | Notification.FLAG_FOREGROUND_SERVICE;
-        if ((n.flags & skipFlags) != 0) return Collections.emptyList();
-        if (isStatusCategory(n.category)) return Collections.emptyList();
+        // Status displays are not messages: services at work, live progress, calls, media.
+        // A plain "ongoing" flag is not enough to tell, a reminder may be made sticky.
+        if ((n.flags & (Notification.FLAG_FOREGROUND_SERVICE | FLAG_PROMOTED_ONGOING)) != 0) {
+            return Collections.emptyList();
+        }
+        if (isStatusCategory(n.category) || isStatusStyle(extras)) return Collections.emptyList();
         if (extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
                 || extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)) {
             return Collections.emptyList();
@@ -113,6 +118,20 @@ public final class NotificationParser {
         boolean believable = when > 0 && when <= postTime + TaskBook.MINUTE
                 && postTime - when < TWO_DAYS;
         return believable ? when : postTime;
+    }
+
+    /**
+     * A group header usually only repeats what its member notifications say ("3 new
+     * messages"), but some apps post a single notification flagged as one.
+     */
+    public static boolean isGroupSummary(Notification n) {
+        return n != null && (n.flags & Notification.FLAG_GROUP_SUMMARY) != 0;
+    }
+
+    private static boolean isStatusStyle(Bundle extras) {
+        String style = charSequence(extras, Notification.EXTRA_TEMPLATE);
+        return style.endsWith("$ProgressStyle") || style.endsWith("$CallStyle")
+                || style.endsWith("$MediaStyle") || style.endsWith("$DecoratedMediaCustomViewStyle");
     }
 
     private static boolean isStatusCategory(String category) {

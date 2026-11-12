@@ -18,6 +18,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 import java.util.Collections;
@@ -114,6 +115,53 @@ public class ListenerAndSyncTest {
         listener.onNotificationPosted(posted("com.anthropic.aibo", 7, "t", "Feed the cats", now + 4 * 60_000));
         assertTrue(current().isEmpty());
         assertEquals(Task.DONE, TaskStore.get(context).get(task.id).state);
+    }
+
+    private StatusBarNotification grouped(int id, String text, boolean summary, long postTime) {
+        Notification n = new Notification.Builder(context, "c")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle("human-task-manager").setContentText(text).setWhen(postTime)
+                .setGroup("duet").setGroupSummary(summary).build();
+        return new StatusBarNotification("com.anthropic.aibo", "com.anthropic.aibo", id, null, 10123, 0, 0,
+                n, UserHandle.getUserHandleForUid(Process.myUid()), postTime);
+    }
+
+    @Test
+    public void aGroupHeaderWithMembersIsNotAReminderOfItsOwn() {
+        long now = System.currentTimeMillis();
+        StatusBarNotification header = grouped(1, "2 new messages", true, now);
+        StatusBarNotification member = grouped(2, "Feed the cats", false, now);
+        Shadows.shadowOf(listener).addActiveNotification(header);
+        Shadows.shadowOf(listener).addActiveNotification(member);
+        listener.onNotificationPosted(header);
+        listener.onNotificationPosted(member);
+        TestSupport.advance(3_000);
+        List<Task> tasks = current();
+        assertEquals(1, tasks.size());
+        assertEquals("Feed the cats", tasks.get(0).text);
+    }
+
+    @Test
+    public void aGroupHeaderThatStaysAloneIsTheMessage() {
+        long now = System.currentTimeMillis();
+        StatusBarNotification header = grouped(1, "Bring the bin back in", true, now);
+        Shadows.shadowOf(listener).addActiveNotification(header);
+        listener.onNotificationPosted(header);
+        assertTrue("not before its members had a chance to arrive", current().isEmpty());
+        TestSupport.advance(3_000);
+        assertEquals("Bring the bin back in", current().get(0).text);
+    }
+
+    @Test
+    public void aSampleAlwaysShowsUpEvenRightAfterOneWasFinished() {
+        Nudge.addSample(context);
+        Task sample = current().get(0);
+        Nudge.done(context, sample);
+        assertTrue(current().isEmpty());
+        Nudge.addSample(context);
+        assertEquals(1, current().size());
+        Nudge.addManual(context, "Buy cat food");
+        assertEquals(2, current().size());
     }
 
     @Test

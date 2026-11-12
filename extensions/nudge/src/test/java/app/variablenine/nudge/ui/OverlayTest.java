@@ -366,6 +366,46 @@ public class OverlayTest {
         assertTrue("the gentle timer should have cued by now", cued);
     }
 
+    @Test
+    public void aReminderThatArrivedWhileAwayIsShownOnReturnEvenSoonAfterACue() {
+        remind("First");
+        ActivityController<Activity> controller = TestSupport.launch();
+        TabView tab = layerOf(controller.get()).tab;
+        TestSupport.advance(8_000);
+        assertFalse(tab.isExtended());
+
+        // The app goes to the background, a reminder arrives, and a minute later the
+        // user is back. The usual gap between cues has not passed, but this one is new.
+        controller.pause();
+        remind("Arrived while away");
+        TestSupport.advance(60_000);
+        controller.resume();
+        TestSupport.advance(400);
+        assertTrue(tab.isExtended());
+    }
+
+    @Test
+    public void theAcknowledgementEndsWithItsScreenAndUndoIsOnlyOfferedThere() {
+        ActivityController<Activity> controller = TestSupport.launch();
+        Activity a = controller.get();
+        remind("Hang the laundry");
+        remind("Shower");
+        TestSupport.advance(10_000);
+        OverlayController.get().onTabTapped(a);
+        TestSupport.idle();
+        tap(ShadowDialog.getLatestDialog(), "Done");
+        assertEquals(1, current().size());
+
+        // Leaving the screen ends the acknowledgement. A tap afterwards opens the card
+        // for what is left. It does not silently bring the finished reminder back.
+        controller.pause().resume();
+        TestSupport.advance(10_000);
+        assertTrue(layerOf(a).tab.performClick());
+        TestSupport.idle();
+        assertEquals(1, current().size());
+        assertTrue(ShadowDialog.getLatestDialog().isShowing());
+    }
+
     // endregion
 
     // region setup

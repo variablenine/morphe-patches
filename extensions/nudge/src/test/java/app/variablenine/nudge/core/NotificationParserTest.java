@@ -1,6 +1,7 @@
 package app.variablenine.nudge.core;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Notification;
@@ -101,15 +102,33 @@ public class NotificationParserTest {
     @Test
     public void statusNotificationsAreNotReminders() {
         assertTrue(NotificationParser.parse(null, POSTED).isEmpty());
-        assertTrue(NotificationParser.parse(builder().setContentTitle("Working").setContentText("…")
-                .setOngoing(true).build(), POSTED).isEmpty());
         assertTrue(NotificationParser.parse(builder().setContentTitle("Uploading").setContentText("3 of 9")
                 .setProgress(9, 3, false).build(), POSTED).isEmpty());
-        assertTrue(NotificationParser.parse(builder().setContentTitle("2 new messages").setContentText("…")
-                .setGroup("g").setGroupSummary(true).build(), POSTED).isEmpty());
+        assertTrue(NotificationParser.parse(builder().setContentTitle("Now playing").setContentText("Song")
+                .setStyle(new Notification.MediaStyle()).build(), POSTED).isEmpty());
+        Notification service = builder().setContentTitle("Working").setContentText("on it").build();
+        service.flags |= Notification.FLAG_FOREGROUND_SERVICE;
+        assertTrue(NotificationParser.parse(service, POSTED).isEmpty());
         assertTrue(NotificationParser.parse(builder().setContentTitle("Call").setContentText("Ringing")
                 .setCategory(Notification.CATEGORY_CALL).build(), POSTED).isEmpty());
         assertTrue(NotificationParser.parse(builder().build(), POSTED).isEmpty());
+    }
+
+    @Test
+    public void aStickyReminderIsStillAReminder() {
+        Notification n = builder().setContentTitle("Duet").setContentText("Take the bin out")
+                .setOngoing(true).build();
+        assertEquals(1, NotificationParser.parse(n, POSTED).size());
+    }
+
+    @Test
+    public void aGroupHeaderIsRecognisedAndLeftToTheCallerToJudge() {
+        Notification header = builder().setContentTitle("human-task-manager").setContentText("Shower")
+                .setGroup("g").setGroupSummary(true).build();
+        assertTrue(NotificationParser.isGroupSummary(header));
+        assertEquals(1, NotificationParser.parse(header, POSTED).size());
+        assertFalse(NotificationParser.isGroupSummary(builder().setContentTitle("x").build()));
+        assertFalse(NotificationParser.isGroupSummary(null));
     }
 
     @Test

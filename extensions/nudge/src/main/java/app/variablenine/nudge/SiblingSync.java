@@ -1,9 +1,9 @@
 package app.variablenine.nudge;
 
+import android.content.ContentProviderClient;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
 
@@ -161,8 +161,9 @@ final class SiblingSync {
             anySiblingHasAccess |= theirAccess;
             prefs.setFeedTarget(authority, !theirAccess);
         }
-        if (!feedTargetsOnly) {
-            // Only a full round says anything about every sibling.
+        // Only a full round that actually reached someone says anything. A sibling that
+        // could not be reached this once (it is being updated, say) has not lost its access.
+        if (!feedTargetsOnly && (reachedAny || siblings(app).isEmpty())) {
             prefs.setFedBySibling(reachedAny && anySiblingHasAccess);
         }
     }
@@ -175,8 +176,17 @@ final class SiblingSync {
             request.putString(KEY_BOOK, store.exportJson());
             request.putBoolean(KEY_HAS_ACCESS, Nudge.hasNotificationAccess(app));
             request.putString(KEY_FROM, ownAuthority);
-            Bundle reply = app.getContentResolver()
-                    .call(Uri.parse("content://" + authority), METHOD_SYNC, null, request);
+            // An "unstable" connection on purpose. With the ordinary kind, Android kills
+            // this app if the other one dies in the middle of the exchange.
+            Bundle reply;
+            ContentProviderClient client =
+                    app.getContentResolver().acquireUnstableContentProviderClient(authority);
+            if (client == null) return null;
+            try {
+                reply = client.call(METHOD_SYNC, null, request);
+            } finally {
+                client.close();
+            }
             if (reply == null) return null;
             store.merge(TaskBook.parse(reply.getString(KEY_BOOK)));
             return reply.getBoolean(KEY_HAS_ACCESS, false);
